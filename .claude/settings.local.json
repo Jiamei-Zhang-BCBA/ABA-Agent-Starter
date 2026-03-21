@@ -1,0 +1,35 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \"import ast; import pathlib; errors=[]; [errors.append\\(f''{f}: {e}''\\) for f in pathlib.Path\\(''app''\\).rglob\\(''*.py''\\) for e in [None] if not \\(lambda p: \\(ast.parse\\(p.read_text\\(encoding=''utf-8''\\)\\), True\\)[-1]\\)\\(f\\)]; print\\(''All files valid'' if not errors else ''\\\\n''.join\\(errors\\)\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\(''app/services/skill_executor.py'', encoding=''utf-8''\\).read\\(\\)\\); print\\(''OK''\\)\")",
+      "Bash(docker --version)",
+      "Bash(docker-compose --version)",
+      "Bash(pip install:*)",
+      "Bash(python -m scripts.seed)",
+      "Bash(/c/Windows/System32/taskkill.exe //F //PID 52944 2)",
+      "Bash(1 sleep:*)",
+      "Bash(curl:*)",
+      "Bash(wc -l /d/OneDrive/wxob/ABA-Agent-Starter/api/app/**/*.py)",
+      "Bash(python -m pytest tests/test_cors.py -v)",
+      "Bash(python -m pytest tests/test_jwt_safety.py -v)",
+      "Bash(python -m pytest tests/test_upload_limits.py::test_rejects_oversized_file -v)",
+      "Bash(python -m pytest tests/test_upload_limits.py::test_rejects_too_many_files tests/test_upload_limits.py::test_accepts_valid_file -v)",
+      "Bash(python -m pytest tests/test_form_validator.py -v)",
+      "Bash(python -m pytest tests/test_rate_limit.py -v)",
+      "Bash(python -m pytest tests/test_cors.py tests/test_jwt_safety.py tests/test_form_validator.py tests/test_rate_limit.py -v)",
+      "Bash(python -m pytest tests/ -v)",
+      "Bash(python -c \"from app.middleware.rate_limiter import limiter; s = limiter._limiter._storage; print\\(type\\(s\\)\\); print\\(dir\\(s\\)\\)\")",
+      "Bash(python -c \"from app.middleware.rate_limiter import limiter; s = limiter._limiter.storage; print\\(type\\(s\\)\\); print\\(dir\\(s\\)\\)\")",
+      "Bash(gh auth:*)",
+      "Bash(git config:*)",
+      "Read(//c/Users/Administrator/.ssh/**)",
+      "Bash(ssh -T git@github.com)",
+      "Bash(winget install:*)",
+      "Bash(export PATH=\"/c/Program Files/GitHub CLI:$PATH\")",
+      "Bash(gh --version)",
+      "Read(//c/Users/Administrator/.config/gh/**)",
+      "Read(//d/OneDrive/wxob/ABA-Agent-Starter/api/$APPDATA/GitHub CLI/**)"
+    ]
+  }
+}

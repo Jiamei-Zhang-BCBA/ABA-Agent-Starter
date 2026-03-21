@@ -1,0 +1,41 @@
+# FastAPI core
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20
+
+# Auth
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+bcrypt==4.2.1
+
+# Database
+sqlalchemy==2.0.36
+asyncpg==0.30.0
+aiosqlite==0.20.0
+alembic==1.14.1
+
+# Redis
+redis==5.2.1
+
+# Object Storage (MinIO / S3 compatible)
+boto3==1.35.86
+
+# Claude API
+anthropic==0.42.0
+
+# File processing
+python-docx==1.1.2
+PyPDF2==3.0.1
+markdown==3.7
+
+# Task queue
+celery[redis]==5.4.0
+
+# Rate limiting
+slowapi==0.1.9
+
+# Utilities
+pydantic==2.10.4
+pydantic-settings==2.7.1
+python-dotenv==1.0.1
+httpx==0.28.1
