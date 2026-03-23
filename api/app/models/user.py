@@ -25,6 +25,8 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     wechat_openid: Mapped[str | None] = mapped_column(String(100), unique=True, nullable=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    is_active: Mapped[bool] = mapped_column(default=True)
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     tenant: Mapped["Tenant"] = relationship(back_populates="users")  # noqa: F821

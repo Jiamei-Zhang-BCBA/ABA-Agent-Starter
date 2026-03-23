@@ -35,7 +35,7 @@ celery[redis]==5.4.0
 slowapi==0.1.9
 
 # Utilities
-pydantic==2.10.4
+pydantic[email]==2.10.4
 pydantic-settings==2.7.1
 python-dotenv==1.0.1
 httpx==0.28.1
