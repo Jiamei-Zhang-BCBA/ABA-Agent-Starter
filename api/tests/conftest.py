@@ -1,7 +1,11 @@
 # api/tests/conftest.py
 import asyncio
+import os
 import pytest
 from fastapi.testclient import TestClient
+
+# Use a dedicated test database to avoid interference with dev DB
+os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///./test_aba.db")
 
 from app.database import engine, Base, async_session
 from app.models import *  # noqa: F401, F403 — ensure all models registered on Base
@@ -45,8 +49,15 @@ def _create_tables():
     async def _teardown():
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.drop_all)
+        await engine.dispose()
 
     asyncio.run(_teardown())
+
+    # Clean up test database file
+    try:
+        os.remove("test_aba.db")
+    except OSError:
+        pass
 
 
 @pytest.fixture

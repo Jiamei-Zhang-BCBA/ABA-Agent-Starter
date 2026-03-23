@@ -68,6 +68,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Structured logging middleware
+from app.middleware.logging_middleware import StructuredLoggingMiddleware
+app.add_middleware(StructuredLoggingMiddleware)
+
 # Rate limiting
 from app.middleware.rate_limiter import limiter, rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -92,7 +96,49 @@ if static_dir.exists():
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "version": "0.1.0"}
+    """Enhanced health check: DB connectivity, storage, active jobs."""
+    from app.database import async_session
+    from sqlalchemy import text, select, func
+    from app.models.job import Job, JobStatus
+
+    checks = {"version": "0.1.0"}
+    all_ok = True
+
+    # Database check
+    try:
+        async with async_session() as db:
+            await db.execute(text("SELECT 1"))
+            # Active job count
+            result = await db.execute(
+                select(func.count(Job.id)).where(
+                    Job.status.in_([JobStatus.QUEUED.value, JobStatus.PARSING.value, JobStatus.PROCESSING.value])
+                )
+            )
+            checks["active_jobs"] = result.scalar() or 0
+        checks["database"] = "ok"
+    except Exception as e:
+        checks["database"] = f"error: {e}"
+        all_ok = False
+
+    # Storage check
+    try:
+        _settings = get_settings()
+        if _settings.storage_mode == "local":
+            storage_root = Path(_settings.local_storage_path)
+            checks["storage"] = "ok" if storage_root.exists() else "error: path not found"
+            if not storage_root.exists():
+                all_ok = False
+        else:
+            checks["storage"] = "s3 (not checked in health)"
+    except Exception as e:
+        checks["storage"] = f"error: {e}"
+        all_ok = False
+
+    checks["status"] = "ok" if all_ok else "degraded"
+
+    from fastapi.responses import JSONResponse
+    status_code = 200 if all_ok else 503
+    return JSONResponse(content=checks, status_code=status_code)
 
 
 @app.get("/")

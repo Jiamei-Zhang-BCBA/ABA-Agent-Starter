@@ -15,6 +15,7 @@ from app.models.tenant import Tenant, Plan
 from app.models.invitation import Invitation
 from app.models.password_reset import PasswordResetToken
 from app.services.auth_service import hash_password, create_access_token, create_refresh_token
+from app.services.audit_service import log_action
 
 
 # --- Registration ---
@@ -59,6 +60,12 @@ async def register_tenant(
     db.add(user)
     await db.flush()
 
+    await db.flush()
+    await log_action(
+        db, tenant_id=str(tenant.id), user_id=str(user.id),
+        action="user.registered", resource_type="tenant", resource_id=str(tenant.id),
+        detail={"org_name": org_name, "plan": plan_name},
+    )
     await db.commit()
     await db.refresh(user)
 
@@ -100,6 +107,12 @@ async def create_invitation(
         expires_at=datetime.utcnow() + timedelta(days=7),
     )
     db.add(invitation)
+    await db.flush()
+    await log_action(
+        db, tenant_id=str(inviter.tenant_id), user_id=str(inviter.id),
+        action="user.invited", resource_type="invitation", resource_id=str(invitation.id),
+        detail={"email": email, "role": role},
+    )
     await db.commit()
     await db.refresh(invitation)
     return invitation
@@ -237,7 +250,13 @@ async def soft_delete_user(db: AsyncSession, admin: User, target_user_id: str) -
     """Soft-delete a user (set is_active=False)."""
     if target_user_id == admin.id:
         raise ValueError("不能删除自己")
-    return await update_user(db, admin, target_user_id, is_active=False)
+    result = await update_user(db, admin, target_user_id, is_active=False)
+    await log_action(
+        db, tenant_id=str(admin.tenant_id), user_id=str(admin.id),
+        action="user.deleted", resource_type="user", resource_id=target_user_id,
+    )
+    await db.commit()
+    return result
 
 
 # --- Password Reset ---

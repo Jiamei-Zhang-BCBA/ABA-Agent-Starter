@@ -15,7 +15,7 @@ from app.models.client import Client
 from app.schemas.job import JobCreateRequest, JobResponse, JobDetailResponse, JobListResponse
 from app.services.auth_service import get_current_user
 from app.services.feature_gate import check_feature_access
-from app.services.form_validator import validate_form_data
+from app.services.form_validator import validate_form_data, validate_file_extensions
 from app.middleware.rate_limiter import limiter
 from app.services.vault_service import create_vault_service
 from app.services.file_processor import parse_file
@@ -26,10 +26,14 @@ router = APIRouter(prefix="/api/v1/jobs", tags=["jobs"])
 def _dispatch_job(job_id: str) -> None:
     """Dispatch a job for processing: Celery if available and connected, else background thread."""
     try:
-        from app.workers.job_worker import process_job_task
-        if process_job_task is not None:
-            process_job_task.delay(job_id)
-            return
+        from app.config import get_settings
+        _s = get_settings()
+        # Only attempt Celery if Redis URL is configured and reachable
+        if _s.redis_url and _s.redis_url != "redis://localhost:6379/0":
+            from app.workers.job_worker import process_job_task
+            if process_job_task is not None:
+                process_job_task.delay(job_id)
+                return
     except Exception:
         pass  # Celery/Redis not available, fall through
 
@@ -77,6 +81,13 @@ async def create_job(
                 detail=f"文件 {f.filename} 超过 {_settings.max_upload_size_mb}MB 限制",
             )
         await f.seek(0)  # Reset for later read
+
+    # Validate file extensions
+    if files:
+        try:
+            validate_file_extensions(feature_id, [f.filename for f in files if f.filename])
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
 
     # Parse and validate form_data
     try:
@@ -127,6 +138,15 @@ async def create_job(
 
     job.upload_ids = upload_ids
     db.add(job)
+
+    from app.services.audit_service import log_action
+    await log_action(
+        db, tenant_id=str(user.tenant_id), user_id=str(user.id),
+        action="job.created", resource_type="job", resource_id=str(job.id),
+        detail={"feature_id": feature_id, "file_count": len(files)},
+        ip_address=request.client.host if request.client else None,
+    )
+
     await db.commit()
     await db.refresh(job)
 

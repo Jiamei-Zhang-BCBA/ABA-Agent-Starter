@@ -23,6 +23,15 @@ router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 @limiter.limit("5/minute")
 async def login(request: Request, req: LoginRequest, db: AsyncSession = Depends(get_db)):
     user = await authenticate_user(db, req.email, req.password)
+
+    from app.services.audit_service import log_action
+    await log_action(
+        db, tenant_id=str(user.tenant_id), user_id=str(user.id),
+        action="user.login", resource_type="user", resource_id=str(user.id),
+        ip_address=request.client.host if request.client else None,
+    )
+    await db.commit()
+
     return TokenResponse(
         access_token=create_access_token(str(user.id), str(user.tenant_id), user.role),
         refresh_token=create_refresh_token(str(user.id)),
