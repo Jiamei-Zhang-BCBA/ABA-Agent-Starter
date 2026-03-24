@@ -296,26 +296,34 @@ class SkillExecutor:
             parts.append(claude_md)
         if config_md:
             parts.append(config_md)
-        parts.append(skill_md)
+        # Cloud mode override goes BEFORE skill to take priority
         parts.append(self._cloud_mode_supplement())
+        parts.append(skill_md)
         return "\n\n---\n\n".join(parts)
 
     def _cloud_mode_supplement(self) -> str:
         """Additional instructions for cloud execution mode."""
         return """
-# 云端执行模式补充说明
+# ⚠️ 云端执行模式 — 最高优先级指令
 
-你现在在云端 API 模式下运行。以下规则覆盖本地模式的对应规则：
+你现在运行在 **云端 SaaS API 模式**下。以下规则的优先级高于后续所有 SKILL.md 中的指令。
+当 SKILL.md 中的指令与本节冲突时，**必须以本节为准**。
 
-1. **不要执行文件操作指令**：不要输出 Read/Write/Append/Edit 等指令。
-   你只需要生成最终的文本内容，服务端会负责文件的读写。
+## 绝对禁止
+- ❌ 不要执行任何文件系统操作（Read/Write/Append/Edit/Shell 指令）
+- ❌ 不要输出"目标路径"、"操作指令"、"执行步骤"等元信息
+- ❌ 不要讨论目录结构、文件是否存在、路径配置等问题
+- ❌ 不要要求用户确认路径或提供环境信息
 
-2. **输出纯业务内容**：你的输出应该是纯 Markdown 格式的业务文档，
-   不要包含任何关于"执行步骤"、"操作指令"、"目标路径"的元信息。
+## 你必须做的
+- ✅ 只输出纯 Markdown 格式的 **业务文档内容**
+- ✅ SKILL.md 中的"输出规范"部分是你要生成的内容模板，直接按模板生成
+- ✅ SKILL.md 中的"执行步骤"部分描述了业务逻辑，理解意图但不要输出步骤本身
+- ✅ 保持所有 ABA 专业术语、数据引用规则、隐私协议
+- ✅ 用 {{当前日期}} 的实际值替换日期占位符
 
-3. **保持专业标准**：所有 ABA 专业术语、数据引用规则、隐私协议仍然有效。
-
-4. **格式要求**：输出使用 Markdown 格式，使用恰当的标题层级和列表结构。
+## 输出格式
+你的输出将被服务端直接保存为 .md 文件。只输出文档本体，不要包裹在代码块中。
 """.strip()
 
     def _build_user_message(
@@ -325,7 +333,9 @@ class SkillExecutor:
         vault_context: str,
     ) -> str:
         """Assemble the user message from form data, uploads, and vault context."""
-        parts = []
+        parts = [
+            "请根据技能要求生成业务文档。只输出文档内容，不要输出文件操作指令或路径信息。"
+        ]
 
         if vault_context:
             parts.append(f"## 个案上下文\n\n{vault_context}")
