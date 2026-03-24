@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel
 from datetime import datetime
 
@@ -24,3 +26,19 @@ class StaffResponse(BaseModel):
     role: str
 
     model_config = {"from_attributes": True}
+
+
+# --- Assignment schemas ---
+
+class ClientAssignRequest(BaseModel):
+    user_id: str
+    relation: Literal["teacher", "parent"]
+
+
+class ClientAssignmentResponse(BaseModel):
+    id: str
+    client_id: str
+    user_id: str
+    user_name: str
+    user_role: str
+    relation: str
