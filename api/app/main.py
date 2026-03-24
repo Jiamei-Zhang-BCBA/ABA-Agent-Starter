@@ -27,6 +27,31 @@ async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
+    # Seed default plans if none exist (dev convenience)
+    from app.database import async_session
+    from sqlalchemy import select
+    from app.models.tenant import Plan
+    from app.core.plan_config import PLAN_CONFIGS
+    async with async_session() as db:
+        result = await db.execute(select(Plan).limit(1))
+        if result.scalar_one_or_none() is None:
+            for name, config in PLAN_CONFIGS.items():
+                plan = Plan(
+                    name=name,
+                    features_json={
+                        "features": config.features
+                        if isinstance(config.features, list)
+                        else config.features
+                    },
+                    max_clients=config.max_clients,
+                    max_staff=config.max_staff,
+                    monthly_jobs=config.monthly_jobs,
+                    price_cents=config.price_cents,
+                )
+                db.add(plan)
+            await db.commit()
+            logger.info("Seeded %d default plans", len(PLAN_CONFIGS))
+
     # Initialize storage backend
     if settings.storage_mode == "local":
         # Create local storage directories
@@ -58,7 +83,11 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS middleware
+# Structured logging middleware (added BEFORE CORS so CORS executes first)
+from app.middleware.logging_middleware import StructuredLoggingMiddleware
+app.add_middleware(StructuredLoggingMiddleware)
+
+# CORS middleware (must be the LAST added so it runs FIRST)
 settings = get_settings()
 app.add_middleware(
     CORSMiddleware,
@@ -67,10 +96,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Structured logging middleware
-from app.middleware.logging_middleware import StructuredLoggingMiddleware
-app.add_middleware(StructuredLoggingMiddleware)
 
 # Rate limiting
 from app.middleware.rate_limiter import limiter, rate_limit_exceeded_handler
