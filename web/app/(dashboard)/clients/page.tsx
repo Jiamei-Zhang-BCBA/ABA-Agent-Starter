@@ -3,25 +3,43 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import type { Client } from "@/types";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import type { Client, Staff } from "@/types";
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("zh-CN");
 }
 
 export default function ClientsPage() {
+  const { user } = useAuth();
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
+  const [staff, setStaff] = useState<Staff[]>([]);
+  const [filterTeacherId, setFilterTeacherId] = useState("all");
+
+  const isSupervisor = user?.role === "org_admin" || user?.role === "bcba";
 
   useEffect(() => {
+    if (isSupervisor) {
+      api
+        .get<{ staff: Staff[] }>("/staff")
+        .then((res) => setStaff(res.staff.filter((s) => s.role === "teacher")))
+        .catch(() => {});
+    }
+  }, [isSupervisor]);
+
+  useEffect(() => {
+    setLoading(true);
+    const params = filterTeacherId !== "all" ? `?teacher_id=${filterTeacherId}` : "";
     api
-      .get<{ clients: Client[] }>("/clients")
+      .get<{ clients: Client[] }>(`/clients${params}`)
       .then((res) => setClients(res.clients))
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
+  }, [filterTeacherId]);
 
   if (loading) {
     return <div className="text-center py-12 text-gray-400">加载中...</div>;
@@ -29,9 +47,33 @@ export default function ClientsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">个案档案</h1>
-        <p className="text-muted-foreground mt-1">查看和管理个案信息</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">个案档案</h1>
+          <p className="text-muted-foreground mt-1">查看和管理个案信息</p>
+        </div>
+
+        {isSupervisor && staff.length > 0 && (
+          <div className="flex items-center space-x-2">
+            <span className="text-sm text-muted-foreground">按老师筛选：</span>
+            <Select
+              value={filterTeacherId}
+              onValueChange={(v) => v && setFilterTeacherId(v)}
+            >
+              <SelectTrigger className="w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">全部</SelectItem>
+                {staff.map((s) => (
+                  <SelectItem key={s.id} value={s.id}>
+                    {s.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
       </div>
 
       {clients.length === 0 ? (

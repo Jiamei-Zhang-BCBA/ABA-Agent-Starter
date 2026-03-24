@@ -153,6 +153,15 @@ export interface Staff {
   role: string;
 }
 
+export interface ClientAssignment {
+  id: string;
+  client_id: string;
+  user_id: string;
+  user_name: string;
+  user_role: string;
+  relation: string;
+}
+
 // Reviews
 export interface Review {
   id: string;
