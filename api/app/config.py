@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     jwt_refresh_token_expire_days: int = 30
 
     # CORS
-    cors_origins: list[str] = ["http://localhost:8000", "http://127.0.0.1:8000"]
+    cors_origins: list[str] = ["http://localhost:8000", "http://127.0.0.1:8000", "http://localhost:3000"]
 
     # Rate limiting
     rate_limit_enabled: bool = True
