@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth";
@@ -14,11 +14,16 @@ import type { TokenResponse, User } from "@/types";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { setAuth, setUser } = useAuth();
+  const { setAuth, setUser, logout } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // Clear stale tokens when landing on login page
+  useEffect(() => {
+    logout();
+  }, [logout]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
