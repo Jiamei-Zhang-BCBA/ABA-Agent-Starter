@@ -55,7 +55,13 @@ export default function RegisterPage() {
       setAuth(res.access_token, res.refresh_token);
       router.push("/features");
     } catch (err) {
-      setError(err instanceof ApiError ? err.detail : "注册失败");
+      if (err instanceof ApiError) {
+        setError(err.detail);
+      } else if (err instanceof Error) {
+        setError(`注册失败: ${err.message}`);
+      } else {
+        setError("注册失败，请检查网络连接");
+      }
     } finally {
       setLoading(false);
     }

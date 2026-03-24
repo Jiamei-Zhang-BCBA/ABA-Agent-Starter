@@ -29,12 +29,25 @@ export default function LoginPage() {
       const tokens = await api.post<TokenResponse>("/auth/login", { email, password });
       setAuth(tokens.access_token, tokens.refresh_token);
 
-      const user = await api.get<User>("/auth/me");
-      setUser(user);
+      // Fetch user profile with explicit token to avoid store timing issues
+      const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+      const meRes = await fetch(`${API_BASE}/auth/me`, {
+        headers: { Authorization: `Bearer ${tokens.access_token}` },
+      });
+      if (meRes.ok) {
+        const user = await meRes.json();
+        setUser(user);
+      }
 
       router.push("/features");
     } catch (err) {
-      setError(err instanceof ApiError ? err.detail : "登录失败");
+      if (err instanceof ApiError) {
+        setError(err.detail);
+      } else if (err instanceof Error) {
+        setError(`登录失败: ${err.message}`);
+      } else {
+        setError("登录失败，请检查网络连接");
+      }
     } finally {
       setLoading(false);
     }
