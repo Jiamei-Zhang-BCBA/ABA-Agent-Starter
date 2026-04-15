@@ -8,8 +8,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Separator } from "@/components/ui/separator";
 import { StaffAssignmentPanel } from "@/components/staff-assignment-panel";
+import { VaultFileViewer } from "@/components/vault-file-viewer";
+import { getFeatureName } from "@/lib/feature-names";
 import type { Client } from "@/types";
 
 function formatTime(iso: string) {
@@ -23,9 +24,13 @@ function formatTime(iso: string) {
 }
 
 const STATUS_MAP: Record<string, { label: string; color: string }> = {
-  pending: { label: "等待中", color: "bg-gray-400" },
+  queued: { label: "排队中", color: "bg-gray-400" },
+  parsing: { label: "解析中", color: "bg-yellow-400" },
   processing: { label: "处理中", color: "bg-blue-400" },
+  pending_review: { label: "待审核", color: "bg-orange-400" },
+  approved: { label: "已审核", color: "bg-green-500" },
   delivered: { label: "已完成", color: "bg-green-500" },
+  rejected: { label: "已退回", color: "bg-red-400" },
   failed: { label: "失败", color: "bg-red-500" },
 };
 
@@ -52,6 +57,8 @@ export default function ClientDetailPage() {
   const clientId = params.id as string;
   const [data, setData] = useState<TimelineResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [viewerPath, setViewerPath] = useState<string | null>(null);
+  const [viewerOpen, setViewerOpen] = useState(false);
 
   useEffect(() => {
     if (!clientId) return;
@@ -61,6 +68,12 @@ export default function ClientDetailPage() {
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [clientId]);
+
+  function openFileViewer(dirLabel: string, filename: string) {
+    const path = `${dirLabel}/${filename}`;
+    setViewerPath(path);
+    setViewerOpen(true);
+  }
 
   if (loading) {
     return <div className="text-center py-12 text-gray-400">加载中...</div>;
@@ -117,7 +130,7 @@ export default function ClientDetailPage() {
                       )}
                     </div>
                     <div className="pb-6">
-                      <p className="font-medium text-sm">{entry.feature_id}</p>
+                      <p className="font-medium text-sm">{getFeatureName(entry.feature_id)}</p>
                       <p className="text-xs text-muted-foreground">
                         {formatTime(entry.created_at)}
                         {" · "}
@@ -155,9 +168,14 @@ export default function ClientDetailPage() {
                     ) : (
                       <ul className="space-y-1">
                         {files.map((f) => (
-                          <li key={f} className="text-sm text-gray-700 flex items-center">
-                            <span className="mr-2">📄</span>
-                            {f}
+                          <li key={f} className="text-sm">
+                            <button
+                              className="text-indigo-600 hover:text-indigo-800 hover:underline flex items-center"
+                              onClick={() => openFileViewer(label, f)}
+                            >
+                              <span className="mr-2">📄</span>
+                              {f}
+                            </button>
                           </li>
                         ))}
                       </ul>
@@ -169,6 +187,13 @@ export default function ClientDetailPage() {
           )}
         </TabsContent>
       </Tabs>
+
+      {/* Vault File Viewer */}
+      <VaultFileViewer
+        path={viewerPath}
+        open={viewerOpen}
+        onOpenChange={setViewerOpen}
+      />
     </div>
   );
 }
