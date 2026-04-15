@@ -20,6 +20,7 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
+  { href: "/dashboard", label: "概览" },
   { href: "/features", label: "功能中心" },
   { href: "/jobs", label: "任务记录" },
   { href: "/clients", label: "个案档案" },

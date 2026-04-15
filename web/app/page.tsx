@@ -8,7 +8,7 @@ export default function Home() {
 
   useEffect(() => {
     const token = localStorage.getItem("aba_token");
-    router.replace(token ? "/features" : "/login");
+    router.replace(token ? "/dashboard" : "/login");
   }, [router]);
 
   return null;
