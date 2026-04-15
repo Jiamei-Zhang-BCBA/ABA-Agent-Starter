@@ -44,6 +44,7 @@ class Settings(BaseSettings):
     claude_mode: str = "cli"
     anthropic_api_key: str = ""
     claude_cli_path: str = "claude"
+    litellm_proxy_url: str = ""  # e.g. "http://litellm:4000" when using LiteLLM proxy
 
     # Skills
     skills_base_path: str = "D:/OneDrive/wxob/ABA-Agent-Starter/.claude/skills"

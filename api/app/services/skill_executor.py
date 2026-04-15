@@ -67,7 +67,11 @@ class SkillExecutor:
 
         if self._mode == "api":
             import anthropic
-            self._api_client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+            base_url = settings.litellm_proxy_url or None
+            self._api_client = anthropic.Anthropic(
+                api_key=settings.anthropic_api_key,
+                base_url=base_url,
+            )
 
     def _load_skill_file(self, skill_name: str) -> str:
         """Load SKILL.md from the skills directory."""

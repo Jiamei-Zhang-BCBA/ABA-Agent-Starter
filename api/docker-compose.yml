@@ -71,6 +71,23 @@ services:
       - miniodata:/data
     command: server /data --console-address ":9001"
 
+  litellm:
+    image: ghcr.io/berriai/litellm:main-latest
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./litellm_config.yaml:/app/config.yaml
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - DATABASE_URL=postgresql://aba:aba_secret@postgres:5432/aba_saas
+      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY:-sk-litellm-dev}
+    command: ["--config", "/app/config.yaml"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles:
+      - litellm
+
 volumes:
   pgdata:
   miniodata:
