@@ -94,13 +94,15 @@ app.add_middleware(StructuredLoggingMiddleware)
 
 # CORS middleware (must be the LAST added so it runs FIRST)
 settings = get_settings()
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+_cors_kwargs: dict = {
+    "allow_origins": settings.cors_origins,
+    "allow_credentials": True,
+    "allow_methods": ["*"],
+    "allow_headers": ["*"],
+}
+if settings.cors_origin_regex:
+    _cors_kwargs["allow_origin_regex"] = settings.cors_origin_regex
+app.add_middleware(CORSMiddleware, **_cors_kwargs)
 
 # Rate limiting
 from app.middleware.rate_limiter import limiter, rate_limit_exceeded_handler

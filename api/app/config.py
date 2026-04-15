@@ -32,6 +32,7 @@ class Settings(BaseSettings):
 
     # CORS
     cors_origins: list[str] = ["http://localhost:8000", "http://127.0.0.1:8000", "http://localhost:3000"]
+    cors_origin_regex: str = ""  # e.g. "https://.*\\.vercel\\.app" for Vercel deployments
 
     # Rate limiting
     rate_limit_enabled: bool = True
