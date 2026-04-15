@@ -23,9 +23,11 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     settings = get_settings()
 
-    # Startup: create tables (dev only, use Alembic migrations in production)
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    # Startup: create tables only for SQLite (dev mode).
+    # In production (PostgreSQL), use Alembic migrations instead.
+    if "sqlite" in settings.database_url:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
 
     # Seed default plans if none exist (dev convenience)
     from app.database import async_session

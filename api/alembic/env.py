@@ -10,9 +10,20 @@ if config.config_file_name is not None:
 # Override sqlalchemy.url from environment variable if set
 db_url = os.environ.get("DATABASE_URL", "")
 if db_url:
-    # Convert async URLs to sync for Alembic
-    db_url = db_url.replace("sqlite+aiosqlite", "sqlite").replace("postgresql+asyncpg", "postgresql")
-    config.set_main_option("sqlalchemy.url", db_url)
+    # Convert async URLs to sync for Alembic's own engine
+    sync_url = db_url.replace("sqlite+aiosqlite", "sqlite").replace("postgresql+asyncpg", "postgresql")
+    config.set_main_option("sqlalchemy.url", sync_url)
+else:
+    # Fallback: use alembic.ini value converted to sync
+    ini_url = config.get_main_option("sqlalchemy.url", "")
+    if ini_url:
+        sync_url = ini_url.replace("sqlite+aiosqlite", "sqlite").replace("postgresql+asyncpg", "postgresql")
+        config.set_main_option("sqlalchemy.url", sync_url)
+
+# Ensure DATABASE_URL is set with async driver before importing app.database
+# (app.database creates an async engine at import time)
+if not os.environ.get("DATABASE_URL"):
+    os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///./alembic_temp.db"
 
 # Import all models so Alembic can detect them
 from app.database import Base
