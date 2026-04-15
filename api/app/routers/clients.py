@@ -1,6 +1,9 @@
 """Client and Staff management endpoints."""
 
+import logging
 import uuid
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select, and_
@@ -106,10 +109,12 @@ async def create_client(
     await db.refresh(client)
 
     # Initialize vault directories for this client
-    from app.services.vault_service import create_vault_service
-    vault = create_vault_service(str(user.tenant_id))
-    code = req.code_name
-    _init_client_vault(vault, code)
+    try:
+        from app.services.vault_service import create_vault_service, init_client_vault
+        vault = create_vault_service(str(user.tenant_id))
+        init_client_vault(vault, req.code_name)
+    except Exception:
+        logger.exception("Failed to initialize vault for client %s", req.code_name)
 
     return client
 
@@ -192,8 +197,11 @@ async def get_client_timeline(
     for label, path_tpl in dirs.items():
         path = path_tpl.format(code=code)
         try:
-            files = vault.list_directory(path)
-            vault_files[label] = [f for f in files if f not in ("placeholder.md", ".gitkeep")]
+            items = vault.list_directory(path)
+            vault_files[label] = [
+                item["name"] for item in items
+                if item["name"] not in ("placeholder.md", ".gitkeep")
+            ]
         except Exception:
             vault_files[label] = []
 
@@ -351,30 +359,3 @@ async def list_staff(
     return {"staff": [StaffResponse.model_validate(s) for s in staff]}
 
 
-# ---------------------------------------------------------------------------
-# Vault initialization helper
-# ---------------------------------------------------------------------------
-
-def _init_client_vault(vault, code: str) -> None:
-    """Create standard vault directories for a new client."""
-    skeleton = {
-        f"01-Clients/Client-{code}/Client-{code}-核心档案.md": (
-            f"---\ntags: [个案/核心档案]\nchild_alias: {code}\n"
-            f"archive_status: 🟡 激活（初访完成，待正式评估）\n---\n\n"
-            f"# [[Client-{code}-核心档案]]\n\n"
-            f"**档案代号**：Client-{code}\n"
-            f"**档案状态**：🟡 激活\n\n"
-            f"## 👤 基本背景\n\n| 项目 | 内容 |\n|------|------|\n| **儿童昵称** | {code} |\n\n"
-            f"## 📋 当前目标摘要\n\n> [待评估后填写]\n\n"
-            f"## 📝 变更日志\n\n- 建档\n"
-        ),
-        f"02-Sessions/Client-{code}-日志库/README.md": (
-            f"# Client-{code} 日志库\n\n此目录存放该个案的课后记录和干预日志。\n"
-        ),
-        f"05-Communication/Client-{code}/README.md": (
-            f"# Client-{code} 家校沟通\n\n此目录存放家书、家长反馈等沟通文件。\n"
-        ),
-    }
-    for path, content in skeleton.items():
-        if not vault.file_exists(path):
-            vault.write_file(path, content)

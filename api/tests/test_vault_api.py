@@ -47,7 +47,7 @@ def test_vault_read_file_not_found():
     assert res.status_code == 404
 
 
-def test_vault_tree_returns_list():
+def test_vault_tree_returns_items():
     token = _register_and_get_token("vault_tree@test.com")
     res = _client.get(
         "/api/v1/vault/tree?prefix=01-Clients",
@@ -55,8 +55,8 @@ def test_vault_tree_returns_list():
     )
     assert res.status_code == 200
     data = res.json()
-    assert "files" in data
-    assert isinstance(data["files"], list)
+    assert "items" in data
+    assert isinstance(data["items"], list)
 
 
 def test_vault_blocks_unauthorized_directory():
@@ -68,3 +68,24 @@ def test_vault_blocks_unauthorized_directory():
         headers=_auth(token),
     )
     assert res.status_code == 200
+
+
+def test_vault_roots_returns_role_filtered_list():
+    """org_admin should see all 7 root directories."""
+    token = _register_and_get_token("vault_roots@test.com")
+    res = _client.get(
+        "/api/v1/vault/roots",
+        headers=_auth(token),
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert "roots" in data
+    roots = data["roots"]
+    assert len(roots) == 7
+    paths = [r["path"] for r in roots]
+    assert "00-RawData" in paths
+    assert "06-Templates" in paths
+    # Each root should have label and icon
+    for root in roots:
+        assert "label" in root
+        assert "icon" in root

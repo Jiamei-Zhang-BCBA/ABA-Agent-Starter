@@ -162,6 +162,33 @@ export interface ClientAssignment {
   relation: string;
 }
 
+// Vault
+export interface VaultItem {
+  name: string;
+  type: "file" | "directory";
+  path: string;
+}
+
+export interface VaultTreeResponse {
+  prefix: string;
+  items: VaultItem[];
+}
+
+export interface VaultRoot {
+  path: string;
+  label: string;
+  icon: string;
+}
+
+export interface VaultRootsResponse {
+  roots: VaultRoot[];
+}
+
+export interface VaultFileContent {
+  path: string;
+  content: string;
+}
+
 // Reviews
 export interface Review {
   id: string;

@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StaffAssignmentPanel } from "@/components/staff-assignment-panel";
 import { VaultFileViewer } from "@/components/vault-file-viewer";
 import { getFeatureName } from "@/lib/feature-names";
+import { FolderOpen } from "lucide-react";
 import type { Client } from "@/types";
 
 function formatTime(iso: string) {
@@ -153,6 +154,14 @@ export default function ClientDetailPage() {
 
         {/* Files Tab */}
         <TabsContent value="files" className="mt-4">
+          <div className="mb-4 flex justify-end">
+            <Link href={`/vault?client=${encodeURIComponent(client.code_name)}`}>
+              <Button variant="outline" size="sm">
+                <FolderOpen className="w-4 h-4 mr-2" />
+                查看完整文件树
+              </Button>
+            </Link>
+          </div>
           {Object.keys(vault_files).length === 0 ? (
             <div className="text-center py-8 text-gray-400">暂无文件</div>
           ) : (

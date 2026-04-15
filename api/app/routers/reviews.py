@@ -48,6 +48,7 @@ async def ai_revise(
             review_service.ai_revise_content,
             req.content,
             req.instruction,
+            req.vault_path,
         )
         return AIReviseResponse(**result)
     except RuntimeError as e:

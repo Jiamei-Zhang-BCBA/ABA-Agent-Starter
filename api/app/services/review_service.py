@@ -118,6 +118,15 @@ async def approve_review(
                 job.client_id = client.id
                 logger.info("Auto-created client %s for intake job %s", code_name, job.id)
 
+                # Initialize vault directories for the new client
+                try:
+                    from app.services.vault_service import create_vault_service, init_client_vault
+                    vault = create_vault_service(str(job.tenant_id))
+                    init_client_vault(vault, code_name)
+                    logger.info("Initialized vault for client %s", code_name)
+                except Exception:
+                    logger.exception("Failed to initialize vault for client %s", code_name)
+
     await db.commit()
     await db.refresh(review)
     return review
@@ -155,16 +164,71 @@ async def reject_review(
     return review
 
 
-def ai_revise_content(content: str, instruction: str) -> dict:
+def _build_structure_guard(vault_path: str | None) -> str:
+    """Build structure protection rules based on the vault file path."""
+    if not vault_path:
+        return ""
+
+    rules: list[str] = []
+
+    if "核心档案" in vault_path:
+        rules.append(
+            "此文件是核心档案，以下章节标题是系统锚点，绝对不能删除、重命名或移动：\n"
+            "- 基本背景\n"
+            "- 核心能力画像\n"
+            "- 强化物偏好清单\n"
+            "- 历史问题行为备忘 / 问题行为预警\n"
+            "- 当前目标摘要\n"
+            "- 全生命周期索引\n"
+            "- 变更日志\n"
+            "你只能修改章节内的内容，不能改变章节标题文字（忽略 emoji 差异）。\n"
+            "frontmatter（--- 之间的 YAML 头）中的 tags 和 child_alias 字段不能删除。"
+        )
+    elif "IEP" in vault_path:
+        rules.append(
+            "此文件是 IEP（个别化教育计划），保留所有目标编号和层级结构。\n"
+            "不要删除或合并已有的目标条目，只修改指令涉及的部分。"
+        )
+    elif "FBA" in vault_path or "功能行为分析" in vault_path:
+        rules.append(
+            "此文件是 FBA（功能行为分析），保留 ABC 记录格式和功能假说结构。\n"
+            "不要改变行为定义的操作性描述格式。"
+        )
+    elif "初访信息表" in vault_path:
+        rules.append(
+            "此文件是初访信息表，保留所有表格结构和字段名。\n"
+            "只修改字段值，不要改变表格列名或整体结构。"
+        )
+    elif "成长档案" in vault_path:
+        rules.append(
+            "此文件是教师成长档案，保留时间线条目的日期格式和层级结构。\n"
+            "新内容追加到末尾，不要删除历史记录。"
+        )
+    elif "日志" in vault_path or "Sessions" in vault_path:
+        rules.append(
+            "此文件是课后记录/日志，保留日期、教师、个案等元数据字段。\n"
+            "不要改变记录的时间戳和基本结构。"
+        )
+
+    if not rules:
+        return ""
+
+    return "\n\n【结构保护规则】\n" + "\n".join(rules)
+
+
+def ai_revise_content(content: str, instruction: str, vault_path: str | None = None) -> dict:
     """
     Call Claude CLI to revise a document according to an instruction.
     Synchronous — the router wraps this with asyncio.to_thread().
     """
+    structure_guard = _build_structure_guard(vault_path)
+
     system_prompt = (
         "你是一位专业的 ABA 临床文档修改助手。用户会给你一份已有的文档和一条修改指令。\n"
         "请严格按照修改指令对文档进行修改，保留文档的整体结构和未涉及的内容。\n"
         "只输出修改后的完整文档，不要添加任何解释、前言或后记。\n"
         "保持原文的 Markdown 格式。"
+        f"{structure_guard}"
     )
 
     user_message = (

@@ -156,9 +156,26 @@ def test_list_directory_returns_created_files(service):
     service.write_file("03-Staff/bob.md", "Bob")
 
     items = service.list_directory("03-Staff")
+    names = [item["name"] for item in items]
 
-    assert "alice.md" in items
-    assert "bob.md" in items
+    assert "alice.md" in names
+    assert "bob.md" in names
+
+
+def test_list_directory_returns_type_info(service):
+    service.write_file("03-Staff/hr/alice.md", "Alice")
+
+    items = service.list_directory("03-Staff")
+    hr_items = [item for item in items if item["name"] == "hr"]
+    assert len(hr_items) == 1
+    assert hr_items[0]["type"] == "directory"
+    assert hr_items[0]["path"] == "03-Staff/hr"
+
+    file_items = service.list_directory("03-Staff/hr")
+    alice = [item for item in file_items if item["name"] == "alice.md"]
+    assert len(alice) == 1
+    assert alice[0]["type"] == "file"
+    assert alice[0]["path"] == "03-Staff/hr/alice.md"
 
 
 def test_list_directory_empty_for_missing_path(service):
@@ -171,7 +188,17 @@ def test_list_directory_does_not_include_sibling_dirs(service):
     service.write_file("03-Staff/hr/bob.md", "Bob")
 
     items = service.list_directory("03-Staff/hr")
-    assert set(items) == {"alice.md", "bob.md"}
+    names = {item["name"] for item in items}
+    assert names == {"alice.md", "bob.md"}
+
+
+def test_list_directory_sorts_dirs_before_files(service):
+    service.write_file("01-Clients/zz-file.md", "file")
+    service.write_file("01-Clients/aa-dir/nested.md", "nested")
+
+    items = service.list_directory("01-Clients")
+    assert items[0]["type"] == "directory"
+    assert items[0]["name"] == "aa-dir"
 
 
 # ---------------------------------------------------------------------------

@@ -46,7 +46,11 @@ class LocalVaultService:
         self.base = Path(settings.local_storage_path) / "tenants" / tenant_id
 
     def _vault_path(self, path: str) -> Path:
-        return self.base / "vault" / path
+        fp = (self.base / "vault" / path).resolve()
+        jail = (self.base / "vault").resolve()
+        if not str(fp).startswith(str(jail) + os.sep) and fp != jail:
+            raise ValueError(f"Path escapes vault jail: {path}")
+        return fp
 
     def read_file(self, path: str) -> Optional[str]:
         """Read a file from the tenant's vault. Returns None if not found."""
@@ -83,12 +87,19 @@ class LocalVaultService:
         """Check if a file exists in the tenant's vault."""
         return self._vault_path(path).exists()
 
-    def list_directory(self, path: str) -> list[str]:
-        """List items under a directory in the tenant's vault."""
+    def list_directory(self, path: str) -> list[dict[str, str]]:
+        """List items under a directory with type information."""
         dp = self._vault_path(path)
         if not dp.exists():
             return []
-        return [item.name for item in dp.iterdir()]
+        items = []
+        for item in sorted(dp.iterdir(), key=lambda p: (p.is_file(), p.name)):
+            items.append({
+                "name": item.name,
+                "type": "directory" if item.is_dir() else "file",
+                "path": f"{path.rstrip('/')}/{item.name}",
+            })
+        return items
 
     def upload_raw_file(self, upload_path: str, file_bytes: bytes, content_type: str) -> None:
         """Upload a raw file (not vault-structured) for processing."""
@@ -191,8 +202,8 @@ class VaultService:
         except ClientError:
             return False
 
-    def list_directory(self, path: str) -> list[str]:
-        """List objects under a prefix in the tenant's vault."""
+    def list_directory(self, path: str) -> list[dict[str, str]]:
+        """List objects under a prefix with type information."""
         prefix = self._key(path.rstrip("/") + "/")
         resp = self.client.list_objects_v2(
             Bucket=self.bucket,
@@ -201,9 +212,21 @@ class VaultService:
         )
         items = []
         for cp in resp.get("CommonPrefixes", []):
-            items.append(cp["Prefix"].removeprefix(prefix).rstrip("/"))
+            name = cp["Prefix"].removeprefix(prefix).rstrip("/")
+            if name:
+                items.append({
+                    "name": name,
+                    "type": "directory",
+                    "path": f"{path.rstrip('/')}/{name}",
+                })
         for obj in resp.get("Contents", []):
-            items.append(obj["Key"].removeprefix(prefix))
+            name = obj["Key"].removeprefix(prefix)
+            if name:
+                items.append({
+                    "name": name,
+                    "type": "file",
+                    "path": f"{path.rstrip('/')}/{name}",
+                })
         return items
 
     def upload_raw_file(self, upload_path: str, file_bytes: bytes, content_type: str) -> None:
@@ -240,6 +263,35 @@ class VaultService:
             Params={"Bucket": self.bucket, "Key": storage_path},
             ExpiresIn=expires_in,
         )
+
+
+# ---------------------------------------------------------------------------
+# Client vault initialization
+# ---------------------------------------------------------------------------
+
+def init_client_vault(vault: "LocalVaultService | VaultService", code: str) -> None:
+    """Create standard vault directories for a new client."""
+    skeleton = {
+        f"01-Clients/Client-{code}/Client-{code}-核心档案.md": (
+            f"---\ntags: [个案/核心档案]\nchild_alias: {code}\n"
+            f"archive_status: 🟡 激活（初访完成，待正式评估）\n---\n\n"
+            f"# [[Client-{code}-核心档案]]\n\n"
+            f"**档案代号**：Client-{code}\n"
+            f"**档案状态**：🟡 激活\n\n"
+            f"## 👤 基本背景\n\n| 项目 | 内容 |\n|------|------|\n| **儿童昵称** | {code} |\n\n"
+            f"## 📋 当前目标摘要\n\n> [待评估后填写]\n\n"
+            f"## 📝 变更日志\n\n- 建档\n"
+        ),
+        f"02-Sessions/Client-{code}-日志库/README.md": (
+            f"# Client-{code} 日志库\n\n此目录存放该个案的课后记录和干预日志。\n"
+        ),
+        f"05-Communication/Client-{code}/README.md": (
+            f"# Client-{code} 家校沟通\n\n此目录存放家书、家长反馈等沟通文件。\n"
+        ),
+    }
+    for path, content in skeleton.items():
+        if not vault.file_exists(path):
+            vault.write_file(path, content)
 
 
 # ---------------------------------------------------------------------------

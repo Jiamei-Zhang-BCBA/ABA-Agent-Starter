@@ -28,6 +28,7 @@ class ReviewRejectRequest(BaseModel):
 class AIReviseRequest(BaseModel):
     content: str
     instruction: str
+    vault_path: str | None = None
 
 
 class AIReviseResponse(BaseModel):
