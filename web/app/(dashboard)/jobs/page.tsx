@@ -8,14 +8,22 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { MarkdownViewer } from "@/components/markdown-viewer";
 import { MarkdownEditor } from "@/components/markdown-editor";
+import { useJobStream } from "@/lib/sse";
+import { getFeatureName } from "@/lib/feature-names";
 import type { Job, JobDetail, JobListResponse } from "@/types";
 
 const STATUS_MAP: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
-  pending: { label: "等待中", variant: "secondary" },
+  queued: { label: "排队中", variant: "secondary" },
+  parsing: { label: "解析中", variant: "outline" },
   processing: { label: "处理中", variant: "outline" },
+  pending_review: { label: "待审核", variant: "secondary" },
+  approved: { label: "已审核", variant: "default" },
   delivered: { label: "已完成", variant: "default" },
+  rejected: { label: "已退回", variant: "destructive" },
   failed: { label: "失败", variant: "destructive" },
 };
+
+const TERMINAL_STATUSES = new Set(["delivered", "approved", "failed", "rejected"]);
 
 function formatTime(iso: string) {
   return new Date(iso).toLocaleString("zh-CN", {
@@ -51,6 +59,29 @@ export default function JobsPage() {
   useEffect(() => {
     fetchJobs();
   }, [fetchJobs]);
+
+  // SSE: auto-update job status when sheet is open and status is non-terminal
+  const streamJobId =
+    sheetOpen && selectedJob && !TERMINAL_STATUSES.has(selectedJob.status)
+      ? selectedJob.id
+      : null;
+
+  const handleStatusUpdate = useCallback(
+    (newStatus: string) => {
+      setSelectedJob((prev) => (prev ? { ...prev, status: newStatus } : prev));
+      // Also update the job in the list
+      setJobs((prev) =>
+        prev.map((j) => (j.id === selectedJob?.id ? { ...j, status: newStatus } : j)),
+      );
+      // If terminal, re-fetch detail to get output content
+      if (TERMINAL_STATUSES.has(newStatus) && selectedJob) {
+        api.get<JobDetail>(`/jobs/${selectedJob.id}`).then(setSelectedJob).catch(() => {});
+      }
+    },
+    [selectedJob],
+  );
+
+  useJobStream(streamJobId, handleStatusUpdate);
 
   async function openJobDetail(job: Job) {
     try {
@@ -106,7 +137,7 @@ export default function JobsPage() {
                     className="cursor-pointer hover:bg-gray-50"
                     onClick={() => openJobDetail(job)}
                   >
-                    <TableCell className="font-medium">{job.feature_id}</TableCell>
+                    <TableCell className="font-medium">{getFeatureName(job.feature_id)}</TableCell>
                     <TableCell>
                       <Badge variant={s.variant}>{s.label}</Badge>
                     </TableCell>
@@ -154,7 +185,7 @@ export default function JobsPage() {
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <span className="text-muted-foreground">功能：</span>
-                  {selectedJob.feature_id}
+                  {getFeatureName(selectedJob.feature_id)}
                 </div>
                 <div>
                   <span className="text-muted-foreground">状态：</span>
@@ -215,10 +246,10 @@ export default function JobsPage() {
                 </div>
               )}
 
-              {selectedJob.status === "processing" && (
+              {!TERMINAL_STATUSES.has(selectedJob.status) && (
                 <div className="text-center py-8 text-gray-400">
                   <div className="animate-spin w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full mx-auto mb-3" />
-                  处理中...
+                  {STATUS_MAP[selectedJob.status]?.label || "处理中"}...
                 </div>
               )}
 
