@@ -21,6 +21,7 @@ from app.core.feature_registry import get_feature
 from app.services.vault_service import create_vault_service
 from app.services.file_processor import parse_file
 from app.services.skill_executor import SkillExecutor
+from app.core.pricing import calculate_cost_cents
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -103,7 +104,7 @@ class JobProcessor:
 
         job.input_tokens = result.input_tokens
         job.output_tokens = result.output_tokens
-        job.cost_cents = int((result.input_tokens * 0.3 + result.output_tokens * 1.5) / 100)
+        job.cost_cents = calculate_cost_cents(result.model_used, result.input_tokens, result.output_tokens)
 
         # --- Step 3: Route based on review tier ---
         if feature._review_tier == "expert":
