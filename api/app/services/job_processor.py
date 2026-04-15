@@ -82,12 +82,14 @@ class JobProcessor:
         # --- Step 1: Parse uploads ---
         job.status = JobStatus.PARSING.value
         db.commit()
+        self._publish_status(job)
 
         parsed_uploads = self._parse_uploads(db, job)
 
         # --- Step 2: Execute skill (with timeout) ---
         job.status = JobStatus.PROCESSING.value
         db.commit()
+        self._publish_status(job)
 
         client_code = None
         if job.client_id:
@@ -123,7 +125,21 @@ class JobProcessor:
             self._write_output_to_vault(vault, feature, client_code or "", result.output_content)
 
         db.commit()
+        self._publish_status(job)
         logger.info("Job %s completed with status: %s", job.id, job.status)
+
+    def _publish_status(self, job: Job) -> None:
+        """Publish job status change to Redis for SSE listeners."""
+        try:
+            import redis as redis_lib
+            import json
+            r = redis_lib.Redis.from_url(settings.redis_url)
+            r.publish(f"job:{job.id}", json.dumps({
+                "status": job.status,
+                "job_id": str(job.id),
+            }))
+        except Exception:
+            pass  # Redis unavailable, SSE clients will fallback to polling
 
     def _execute_with_timeout(self, executor, feature, form_data, parsed_uploads, client_code):
         """Execute skill with a timeout. Uses threading for cross-platform support."""
