@@ -75,6 +75,20 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning("Could not initialize MinIO bucket: %s", e)
 
+    # Ensure all existing clients have vault directories
+    try:
+        from app.models.client import Client
+        from app.services.vault_service import create_vault_service, init_client_vault
+        async with async_session() as db:
+            clients = (await db.execute(select(Client))).scalars().all()
+            for client in clients:
+                vault = create_vault_service(str(client.tenant_id))
+                init_client_vault(vault, client.code_name)
+            if clients:
+                logger.info("Verified vault directories for %d clients", len(clients))
+    except Exception:
+        logger.exception("Failed to verify client vault directories")
+
     yield
 
     # Shutdown

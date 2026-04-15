@@ -295,6 +295,75 @@ def init_client_vault(vault: "LocalVaultService | VaultService", code: str) -> N
 
 
 # ---------------------------------------------------------------------------
+# Write skill output to vault
+# ---------------------------------------------------------------------------
+
+def write_output_to_vault(
+    vault: "LocalVaultService | VaultService",
+    skill_name: str,
+    client_code: str,
+    content: str,
+) -> None:
+    """
+    Write skill output to the appropriate vault location.
+    Supports multi-file output via <!-- FILE: path --> markers.
+    Called by both job_processor (auto-approve) and review_service (manual approve).
+    """
+    import re
+    from datetime import datetime, timezone
+
+    # Check if output contains multi-file markers
+    file_markers = list(re.finditer(
+        r'<!--\s*FILE:\s*(.+?)(?:\s*\|\s*(APPEND))?\s*-->', content
+    ))
+
+    if file_markers:
+        for i, marker in enumerate(file_markers):
+            path = marker.group(1).strip()
+            is_append = marker.group(2) is not None
+            start = marker.end()
+            end = file_markers[i + 1].start() if i + 1 < len(file_markers) else len(content)
+            file_content = content[start:end].strip()
+
+            if not file_content:
+                continue
+
+            try:
+                if is_append:
+                    existing = vault.read_file(path) or ""
+                    vault.write_file(path, existing + "\n" + file_content)
+                else:
+                    vault.write_file(path, file_content)
+                logger.info("Wrote vault file: %s (append=%s)", path, is_append)
+            except Exception as e:
+                logger.error("Failed to write vault file %s: %s", path, e)
+    else:
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        path_map = {
+            "session-reviewer": f"02-Sessions/Client-{client_code}-日志库/{today}-反馈.md",
+            "parent-update": f"05-Communication/Client-{client_code}/{today}-家书.md",
+            "teacher-guide": f"03-Staff/{today}-实操单-Client-{client_code}.md",
+            "quick-summary": f"05-Communication/Client-{client_code}/{today}-简报.md",
+            "staff-supervision": f"04-Supervision/{today}-听课反馈.md",
+            "clinical-reflection": f"04-Supervision/{today}-周复盘.md",
+            "reinforcer-tracker": f"01-Clients/Client-{client_code}/{today}-强化物评估.md",
+            "privacy-filter": f"00-RawData/脱敏存档/{today}-Client-{client_code}-脱敏.md",
+            "staff-onboarding": f"03-Staff/{today}-新教师建档.md",
+            "intake-interview": f"01-Clients/Client-{client_code}/Client-{client_code}-初访信息表.md",
+            "profile-builder": f"01-Clients/Client-{client_code}/Client-{client_code}-核心档案.md",
+            "plan-generator": f"01-Clients/Client-{client_code}/{today}-IEP.md",
+            "fba-analyzer": f"01-Clients/Client-{client_code}/{today}-FBA.md",
+            "assessment-logger": f"01-Clients/Client-{client_code}/{today}-评估记录.md",
+            "milestone-report": f"01-Clients/Client-{client_code}/{today}-阶段报告.md",
+            "transfer-protocol": f"01-Clients/Client-{client_code}/{today}-移交协议.md",
+        }
+        path = path_map.get(skill_name)
+        if path:
+            vault.write_file(path, content)
+            logger.info("Wrote vault file: %s", path)
+
+
+# ---------------------------------------------------------------------------
 # Factory
 # ---------------------------------------------------------------------------
 

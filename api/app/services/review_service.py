@@ -127,6 +127,30 @@ async def approve_review(
                 except Exception:
                     logger.exception("Failed to initialize vault for client %s", code_name)
 
+    # Write approved output to vault
+    try:
+        from app.services.vault_service import create_vault_service, write_output_to_vault
+        from app.core.feature_registry import get_feature
+        vault = create_vault_service(str(job.tenant_id))
+        feature = get_feature(job.feature_id)
+        if feature:
+            client_code = ""
+            if job.client_id:
+                client_result = await db.execute(
+                    select(Client).where(Client.id == job.client_id)
+                )
+                client_obj = client_result.scalar_one_or_none()
+                if client_obj:
+                    client_code = client_obj.code_name
+            elif job.form_data_json:
+                alias = job.form_data_json.get("child_alias", "")
+                if alias:
+                    client_code = f"A-{alias}"
+            write_output_to_vault(vault, feature._skill_name, client_code, final_content)
+            logger.info("Wrote approved output to vault for job %s", job.id)
+    except Exception:
+        logger.exception("Failed to write approved output to vault for job %s", job.id)
+
     await db.commit()
     await db.refresh(review)
     return review

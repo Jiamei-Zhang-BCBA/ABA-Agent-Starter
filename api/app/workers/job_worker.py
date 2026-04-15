@@ -137,7 +137,8 @@ def _process_job(db: Session, job_id: str):
 
         # Write output to vault
         if client_code:
-            _write_output_to_vault(vault, feature, client_code, result.output_content)
+            from app.services.vault_service import write_output_to_vault
+            write_output_to_vault(vault, feature._skill_name, client_code, result.output_content)
 
     db.commit()
     logger.info("Job %s completed with status: %s", job_id, job.status)
@@ -172,34 +173,6 @@ def _parse_uploads(db: Session, job: Job) -> list[str]:
             parsed.append(f"[文件解析失败: {upload.original_filename}]")
 
     return parsed
-
-
-def _write_output_to_vault(
-    vault,
-    feature,
-    client_code: str,
-    content: str,
-):
-    """Write skill output to the appropriate vault location."""
-    skill_name = feature._skill_name
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-
-    # Route to correct vault location based on skill
-    path_map = {
-        "session-reviewer": f"02-Sessions/Client-{client_code}-日志库/{today}-反馈.md",
-        "parent-update": f"05-Communication/Client-{client_code}/{today}-家书.md",
-        "teacher-guide": f"03-Staff/{today}-实操单-Client-{client_code}.md",
-        "quick-summary": f"05-Communication/Client-{client_code}/{today}-简报.md",
-        "staff-supervision": f"04-Supervision/{today}-听课反馈.md",
-        "clinical-reflection": f"04-Supervision/{today}-周复盘.md",
-        "reinforcer-tracker": f"01-Clients/Client-{client_code}/{today}-强化物评估.md",
-        "privacy-filter": f"00-RawData/脱敏存档/{today}-Client-{client_code}-脱敏.md",
-        "staff-onboarding": f"03-Staff/{today}-新教师建档.md",
-    }
-
-    path = path_map.get(skill_name)
-    if path:
-        vault.write_file(path, content)
 
 
 def _mark_job_failed(db: Session, job_id: str, error: str):

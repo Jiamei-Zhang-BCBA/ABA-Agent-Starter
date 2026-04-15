@@ -122,7 +122,8 @@ class JobProcessor:
             job.status = JobStatus.DELIVERED.value
             job.completed_at = datetime.now(timezone.utc)
 
-            self._write_output_to_vault(vault, feature, client_code or "", result.output_content)
+            from app.services.vault_service import write_output_to_vault
+            write_output_to_vault(vault, feature._skill_name, client_code or "", result.output_content)
 
         db.commit()
         self._publish_status(job)
@@ -194,54 +195,6 @@ class JobProcessor:
                 parsed.append(f"[文件解析失败: {upload.original_filename}]")
 
         return parsed
-
-    def _write_output_to_vault(self, vault, feature, client_code: str, content: str) -> None:
-        """Write skill output to vault. Supports multi-file output via FILE markers."""
-        import re
-
-        # Check if output contains multi-file markers
-        file_markers = list(re.finditer(
-            r'<!--\s*FILE:\s*(.+?)(?:\s*\|\s*(APPEND))?\s*-->', content
-        ))
-
-        if file_markers:
-            # Multi-file output: parse and write each file
-            for i, marker in enumerate(file_markers):
-                path = marker.group(1).strip()
-                is_append = marker.group(2) is not None
-                start = marker.end()
-                end = file_markers[i + 1].start() if i + 1 < len(file_markers) else len(content)
-                file_content = content[start:end].strip()
-
-                if not file_content:
-                    continue
-
-                try:
-                    if is_append:
-                        existing = vault.read_file(path) or ""
-                        vault.write_file(path, existing + "\n" + file_content)
-                    else:
-                        vault.write_file(path, file_content)
-                    logger.info("Wrote vault file: %s (append=%s)", path, is_append)
-                except Exception as e:
-                    logger.error("Failed to write vault file %s: %s", path, e)
-        else:
-            # Single-file output: use default path mapping
-            today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-            path_map = {
-                "session-reviewer": f"02-Sessions/Client-{client_code}-日志库/{today}-反馈.md",
-                "parent-update": f"05-Communication/Client-{client_code}/{today}-家书.md",
-                "teacher-guide": f"03-Staff/{today}-实操单-Client-{client_code}.md",
-                "quick-summary": f"05-Communication/Client-{client_code}/{today}-简报.md",
-                "staff-supervision": f"04-Supervision/{today}-听课反馈.md",
-                "clinical-reflection": f"04-Supervision/{today}-周复盘.md",
-                "reinforcer-tracker": f"01-Clients/Client-{client_code}/{today}-强化物评估.md",
-                "privacy-filter": f"00-RawData/脱敏存档/{today}-Client-{client_code}-脱敏.md",
-                "staff-onboarding": f"03-Staff/{today}-新教师建档.md",
-            }
-            path = path_map.get(feature._skill_name)
-            if path:
-                vault.write_file(path, content)
 
     def _mark_failed(self, db: Session, job: Job, error: str) -> None:
         """Mark a job as permanently failed."""
