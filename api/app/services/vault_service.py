@@ -270,25 +270,80 @@ class VaultService:
 # ---------------------------------------------------------------------------
 
 def init_client_vault(vault: "LocalVaultService | VaultService", code: str) -> None:
-    """Create standard vault directories for a new client."""
+    """
+    Create the full vault directory tree for a new client,
+    matching the structure defined in skills/_config.md.
+
+    Directories created:
+      01-Clients/Client-{code}/          — 个案主目录
+      02-Sessions/Client-{code}-日志库/  — 课后记录
+      05-Communication/Client-{code}-沟通记录/ — 家校沟通
+    """
+    c = f"Client-{code}"
+
     skeleton = {
-        f"01-Clients/Client-{code}/Client-{code}-核心档案.md": (
+        # ── 01-Clients: 核心档案（完整骨架，含所有受保护章节锚点）
+        f"01-Clients/{c}/{c}-核心档案.md": (
             f"---\ntags: [个案/核心档案]\nchild_alias: {code}\n"
             f"archive_status: 🟡 激活（初访完成，待正式评估）\n---\n\n"
-            f"# [[Client-{code}-核心档案]]\n\n"
-            f"**档案代号**：Client-{code}\n"
+            f"# [[{c}-核心档案]]\n\n"
+            f"**档案代号**：{c}\n"
             f"**档案状态**：🟡 激活\n\n"
-            f"## 👤 基本背景\n\n| 项目 | 内容 |\n|------|------|\n| **儿童昵称** | {code} |\n\n"
-            f"## 📋 当前目标摘要\n\n> [待评估后填写]\n\n"
-            f"## 📝 变更日志\n\n- 建档\n"
+            f"## 👤 基本背景\n\n"
+            f"| 项目 | 内容 |\n|------|------|\n"
+            f"| **儿童昵称** | {code} |\n"
+            f"| **性别** | ⏳ [待填写] |\n"
+            f"| **出生日期** | ⏳ [待填写] |\n"
+            f"| **诊断** | ⏳ [待填写] |\n\n"
+            f"## 🧠 核心能力画像\n\n> ⏳ [待 assessment-logger 评估后填写]\n\n"
+            f"## 🎁 强化物偏好清单\n\n> ⏳ [待 reinforcer-tracker 评估后填写]\n\n"
+            f"## ⚠️ 历史问题行为备忘\n\n> ⏳ [待 fba-analyzer 分析后填写]\n\n"
+            f"## 📋 当前目标摘要\n\n> ⏳ [待 plan-generator 制定IEP后填写]\n\n"
+            f"## 🔗 全生命周期索引\n\n"
+            f"- [[{c}-初访信息表]]\n\n"
+            f"## 📝 变更日志\n\n"
+            f"- 建档\n"
         ),
-        f"02-Sessions/Client-{code}-日志库/README.md": (
-            f"# Client-{code} 日志库\n\n此目录存放该个案的课后记录和干预日志。\n"
+
+        # ── 01-Clients: 初访信息表占位
+        f"01-Clients/{c}/{c}-初访信息表.md": (
+            f"# [[{c}-初访信息表]]\n\n"
+            f"> ⏳ 此文件将在 intake-interview 技能执行后自动填充。\n"
         ),
-        f"05-Communication/Client-{code}/README.md": (
-            f"# Client-{code} 家校沟通\n\n此目录存放家书、家长反馈等沟通文件。\n"
+
+        # ── 01-Clients: 能力评估占位
+        f"01-Clients/{c}/{c}-能力评估.md": (
+            f"# [[{c}-能力评估]]\n\n"
+            f"> ⏳ 此文件将在 assessment-logger 技能执行后自动填充。\n"
+        ),
+
+        # ── 01-Clients: FBA分析占位
+        f"01-Clients/{c}/{c}-FBA分析.md": (
+            f"# [[{c}-FBA分析]]\n\n"
+            f"> ⏳ 此文件将在 fba-analyzer 技能执行后自动填充。\n"
+        ),
+
+        # ── 01-Clients: IEP方案占位
+        f"01-Clients/{c}/{c}-IEP.md": (
+            f"# [[{c}-IEP]]\n\n"
+            f"> ⏳ 此文件将在 plan-generator 技能执行后自动填充。\n"
+        ),
+
+        # ── 02-Sessions: 日志库目录
+        f"02-Sessions/{c}-日志库/README.md": (
+            f"# {c} 日志库\n\n"
+            f"此目录存放该个案的课后记录和干预日志。\n"
+            f"由 session-reviewer 技能自动生成。\n"
+        ),
+
+        # ── 05-Communication: 沟通记录目录
+        f"05-Communication/{c}-沟通记录/README.md": (
+            f"# {c} 家校沟通\n\n"
+            f"此目录存放家书、家长反馈、电梯简报等沟通文件。\n"
+            f"由 parent-update / quick-summary / milestone-report 技能自动生成。\n"
         ),
     }
+
     for path, content in skeleton.items():
         if not vault.file_exists(path):
             vault.write_file(path, content)
@@ -339,23 +394,31 @@ def write_output_to_vault(
                 logger.error("Failed to write vault file %s: %s", path, e)
     else:
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        c = f"Client-{client_code}"
         path_map = {
-            "session-reviewer": f"02-Sessions/Client-{client_code}-日志库/{today}-反馈.md",
-            "parent-update": f"05-Communication/Client-{client_code}/{today}-家书.md",
-            "teacher-guide": f"03-Staff/{today}-实操单-Client-{client_code}.md",
-            "quick-summary": f"05-Communication/Client-{client_code}/{today}-简报.md",
-            "staff-supervision": f"04-Supervision/{today}-听课反馈.md",
-            "clinical-reflection": f"04-Supervision/{today}-周复盘.md",
-            "reinforcer-tracker": f"01-Clients/Client-{client_code}/{today}-强化物评估.md",
-            "privacy-filter": f"00-RawData/脱敏存档/{today}-Client-{client_code}-脱敏.md",
+            # 00-RawData
+            "privacy-filter": f"00-RawData/脱敏存档/{c}-脱敏原始数据.md",
+            # 01-Clients — 固定名称文件（覆盖占位骨架）
+            "intake-interview": f"01-Clients/{c}/{c}-初访信息表.md",
+            "profile-builder": f"01-Clients/{c}/{c}-核心档案.md",
+            "assessment-logger": f"01-Clients/{c}/{c}-能力评估.md",
+            "fba-analyzer": f"01-Clients/{c}/{c}-FBA分析.md",
+            "plan-generator": f"01-Clients/{c}/{c}-IEP.md",
+            # 01-Clients — 带日期的文件（可多版本）
+            "reinforcer-tracker": f"01-Clients/{c}/{c}-强化物评估-{today}.md",
+            "milestone-report": f"01-Clients/{c}/{c}-里程碑报告-{today}.md",
+            "transfer-protocol": f"01-Clients/{c}/{c}-转衔移交协议-{today}.md",
+            # 02-Sessions
+            "session-reviewer": f"02-Sessions/{c}-日志库/{today}-{c}-记录.md",
+            # 03-Staff
+            "teacher-guide": f"03-Staff/{today}-实操单-{c}.md",
             "staff-onboarding": f"03-Staff/{today}-新教师建档.md",
-            "intake-interview": f"01-Clients/Client-{client_code}/Client-{client_code}-初访信息表.md",
-            "profile-builder": f"01-Clients/Client-{client_code}/Client-{client_code}-核心档案.md",
-            "plan-generator": f"01-Clients/Client-{client_code}/{today}-IEP.md",
-            "fba-analyzer": f"01-Clients/Client-{client_code}/{today}-FBA.md",
-            "assessment-logger": f"01-Clients/Client-{client_code}/{today}-评估记录.md",
-            "milestone-report": f"01-Clients/Client-{client_code}/{today}-阶段报告.md",
-            "transfer-protocol": f"01-Clients/Client-{client_code}/{today}-移交协议.md",
+            "staff-supervision": f"04-Supervision/{today}-听课反馈.md",
+            # 04-Supervision
+            "clinical-reflection": f"04-Supervision/{today}-周复盘.md",
+            # 05-Communication
+            "parent-update": f"05-Communication/{c}-沟通记录/{today}-家书.md",
+            "quick-summary": f"05-Communication/{c}-沟通记录/{today}-电梯简报.md",
         }
         path = path_map.get(skill_name)
         if path:
