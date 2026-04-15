@@ -8,8 +8,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Label } from "@/components/ui/label";
 import { MarkdownViewer } from "./markdown-viewer";
+import { ReviewEditor } from "./review-editor";
 import type { Review } from "@/types";
 
 interface ReviewCardProps {
@@ -18,27 +20,10 @@ interface ReviewCardProps {
 }
 
 export function ReviewCard({ review, onAction }: ReviewCardProps) {
-  const [approveOpen, setApproveOpen] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
-  const [modifiedContent, setModifiedContent] = useState("");
   const [comments, setComments] = useState("");
   const [loading, setLoading] = useState(false);
-
-  async function handleApprove() {
-    setLoading(true);
-    try {
-      await api.post(`/reviews/${review.id}/approve`, {
-        modified_content: modifiedContent || undefined,
-      });
-      toast.success("已批准");
-      setApproveOpen(false);
-      onAction();
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.detail : "操作失败");
-    } finally {
-      setLoading(false);
-    }
-  }
 
   async function handleReject() {
     if (!comments.trim()) {
@@ -78,8 +63,8 @@ export function ReviewCard({ review, onAction }: ReviewCardProps) {
           </div>
           {review.status === "pending" && (
             <div className="flex space-x-2">
-              <Button size="sm" onClick={() => setApproveOpen(true)}>
-                批准
+              <Button size="sm" onClick={() => setEditorOpen(true)}>
+                审核
               </Button>
               <Button size="sm" variant="destructive" onClick={() => setRejectOpen(true)}>
                 拒绝
@@ -94,33 +79,33 @@ export function ReviewCard({ review, onAction }: ReviewCardProps) {
         </CardContent>
       </Card>
 
-      <Dialog open={approveOpen} onOpenChange={setApproveOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>批准审核</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>修改内容（可选）</Label>
-              <Textarea
-                value={modifiedContent}
-                onChange={(e) => setModifiedContent(e.target.value)}
-                placeholder="如需修改输出内容，请在此编辑"
-                rows={6}
-              />
-            </div>
-            <div className="flex justify-end space-x-2">
-              <Button variant="outline" onClick={() => setApproveOpen(false)}>
-                取消
-              </Button>
-              <Button onClick={handleApprove} disabled={loading}>
-                {loading ? "提交中..." : "确认批准"}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* Full-screen Review Editor */}
+      <Sheet open={editorOpen} onOpenChange={setEditorOpen}>
+        <SheetContent className="w-full sm:max-w-none sm:w-[80vw] lg:w-[70vw] overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>审核编辑</SheetTitle>
+            <SheetDescription>
+              直接编辑文档或使用底部 AI 辅助修改，满意后点击"批准"
+            </SheetDescription>
+          </SheetHeader>
+          {editorOpen && (
+            <ReviewEditor
+              review={review}
+              onApprove={() => {
+                setEditorOpen(false);
+                onAction();
+              }}
+              onReject={() => {
+                setEditorOpen(false);
+                onAction();
+              }}
+              onCancel={() => setEditorOpen(false)}
+            />
+          )}
+        </SheetContent>
+      </Sheet>
 
+      {/* Quick Reject Dialog */}
       <Dialog open={rejectOpen} onOpenChange={setRejectOpen}>
         <DialogContent>
           <DialogHeader>

@@ -23,3 +23,14 @@ class ReviewApproveRequest(BaseModel):
 
 class ReviewRejectRequest(BaseModel):
     comments: str
+
+
+class AIReviseRequest(BaseModel):
+    content: str
+    instruction: str
+
+
+class AIReviseResponse(BaseModel):
+    revised_content: str
+    input_tokens: int
+    output_tokens: int

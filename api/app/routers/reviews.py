@@ -1,5 +1,6 @@
-"""Review endpoints: list pending, approve, reject."""
+"""Review endpoints: list pending, approve, reject, AI-assisted revision."""
 
+import asyncio
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -7,7 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.user import User
-from app.schemas.review import ReviewResponse, ReviewApproveRequest, ReviewRejectRequest
+from app.schemas.review import (
+    ReviewResponse, ReviewApproveRequest, ReviewRejectRequest,
+    AIReviseRequest, AIReviseResponse,
+)
 from app.services.auth_service import require_roles
 from app.services import review_service
 
@@ -22,6 +26,32 @@ async def list_reviews(
     """List pending reviews for the current tenant."""
     reviews = await review_service.get_pending_reviews(db, user.tenant_id)
     return {"reviews": [ReviewResponse.model_validate(r) for r in reviews]}
+
+
+@router.post("/ai-revise", response_model=AIReviseResponse)
+async def ai_revise(
+    req: AIReviseRequest,
+    user: User = Depends(require_roles("org_admin", "bcba")),
+):
+    """AI-assisted document revision via Claude CLI."""
+    if not req.content.strip():
+        raise HTTPException(status_code=400, detail="文档内容不能为空")
+    if not req.instruction.strip():
+        raise HTTPException(status_code=400, detail="修改指令不能为空")
+    if len(req.content) > 50_000:
+        raise HTTPException(status_code=400, detail="文档内容过长（最大 50000 字符）")
+    if len(req.instruction) > 2_000:
+        raise HTTPException(status_code=400, detail="修改指令过长（最大 2000 字符）")
+
+    try:
+        result = await asyncio.to_thread(
+            review_service.ai_revise_content,
+            req.content,
+            req.instruction,
+        )
+        return AIReviseResponse(**result)
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
 
 
 @router.post("/{review_id}/approve", response_model=ReviewResponse)
