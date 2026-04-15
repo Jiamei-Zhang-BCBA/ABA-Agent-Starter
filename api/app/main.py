@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse
 
 from app.config import get_settings
 from app.database import engine, Base
-from app.routers import auth, features, jobs, reviews, clients, users, usage
+from app.routers import auth, features, jobs, reviews, clients, users, usage, stream
 
 logger = logging.getLogger(__name__)
 
@@ -114,6 +114,7 @@ app.include_router(reviews.router)
 app.include_router(clients.router)
 app.include_router(users.router)
 app.include_router(usage.router)
+app.include_router(stream.router)
 
 
 # Serve static frontend files
