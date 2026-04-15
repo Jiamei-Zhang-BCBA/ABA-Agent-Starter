@@ -68,8 +68,8 @@ class FeatureModule:
 # Registry — all 17 features (P1 activates 3, rest marked for later phases)
 # ---------------------------------------------------------------------------
 
-_FILE_ACCEPT = [".docx", ".pdf", ".txt", ".jpg", ".png"]
-_MEDIA_ACCEPT = [".docx", ".pdf", ".txt", ".jpg", ".png", ".mp3", ".m4a"]
+_FILE_ACCEPT = [".docx", ".pdf", ".txt", ".md", ".jpg", ".png"]
+_MEDIA_ACCEPT = [".docx", ".pdf", ".txt", ".md", ".jpg", ".png", ".mp3", ".m4a"]
 
 FEATURE_REGISTRY: dict[str, FeatureModule] = {
 
