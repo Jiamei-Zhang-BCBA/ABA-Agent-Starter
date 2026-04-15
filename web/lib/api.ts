@@ -38,6 +38,30 @@ async function request<T>(
   });
 
   if (res.status === 401) {
+    // Try to refresh the token before giving up
+    const { refreshToken, setAuth } = useAuth.getState();
+    if (refreshToken) {
+      try {
+        const refreshRes = await fetch(`${API_BASE}/auth/refresh`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ refresh_token: refreshToken }),
+        });
+        if (refreshRes.ok) {
+          const data = await refreshRes.json();
+          setAuth(data.access_token, data.refresh_token);
+          // Replay the original request with new token
+          headers["Authorization"] = `Bearer ${data.access_token}`;
+          const retryRes = await fetch(`${API_BASE}${path}`, { ...options, headers });
+          if (retryRes.ok) {
+            if (retryRes.status === 204) return undefined as T;
+            return retryRes.json();
+          }
+        }
+      } catch {
+        // refresh failed, fall through to logout
+      }
+    }
     logout();
     window.location.href = "/login";
     throw new ApiError(401, "登录已过期");
