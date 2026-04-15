@@ -6,6 +6,11 @@ Handles registration, invitation, password reset, and user CRUD.
 import secrets
 from datetime import datetime, timedelta, timezone
 
+
+def _utcnow() -> datetime:
+    """Timezone-aware UTC now, stripped to naive for SQLite compatibility."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
 from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
@@ -104,7 +109,7 @@ async def create_invitation(
         role=role,
         token=secrets.token_urlsafe(32),
         invited_by=inviter.id,
-        expires_at=datetime.utcnow() + timedelta(days=7),
+        expires_at=_utcnow() + timedelta(days=7),
     )
     db.add(invitation)
     await db.flush()
@@ -136,7 +141,7 @@ async def accept_invitation(
     if invitation.accepted_at is not None:
         raise ValueError("该邀请已被使用")
 
-    if invitation.expires_at < datetime.utcnow():
+    if invitation.expires_at < _utcnow():
         raise ValueError("邀请链接已过期")
 
     # Check email not taken
@@ -155,7 +160,7 @@ async def accept_invitation(
     db.add(user)
 
     # Mark invitation as accepted
-    invitation.accepted_at = datetime.utcnow()
+    invitation.accepted_at = _utcnow()
     db.add(invitation)
 
     await db.commit()
@@ -274,7 +279,7 @@ async def request_password_reset(db: AsyncSession, email: str) -> str | None:
     token_obj = PasswordResetToken(
         user_id=user.id,
         token=secrets.token_urlsafe(32),
-        expires_at=datetime.utcnow() + timedelta(hours=1),
+        expires_at=_utcnow() + timedelta(hours=1),
     )
     db.add(token_obj)
     await db.commit()
@@ -294,7 +299,7 @@ async def confirm_password_reset(db: AsyncSession, token: str, new_password: str
     if token_obj.used_at is not None:
         raise ValueError("该重置链接已被使用")
 
-    if token_obj.expires_at < datetime.utcnow():
+    if token_obj.expires_at < _utcnow():
         raise ValueError("重置链接已过期")
 
     # Update password
@@ -304,7 +309,7 @@ async def confirm_password_reset(db: AsyncSession, token: str, new_password: str
     db.add(user)
 
     # Mark token as used
-    token_obj.used_at = datetime.utcnow()
+    token_obj.used_at = _utcnow()
     db.add(token_obj)
 
     await db.commit()

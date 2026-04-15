@@ -102,6 +102,7 @@ _cors_kwargs: dict = {
 }
 if settings.cors_origin_regex:
     _cors_kwargs["allow_origin_regex"] = settings.cors_origin_regex
+logger.info("CORS config: origins=%s, regex=%s", settings.cors_origins, settings.cors_origin_regex)
 app.add_middleware(CORSMiddleware, **_cors_kwargs)
 
 # Rate limiting

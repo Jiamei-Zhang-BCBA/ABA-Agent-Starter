@@ -67,7 +67,7 @@ def _parse_docx(file_bytes: bytes) -> str:
 def _parse_pdf(file_bytes: bytes) -> str:
     """Extract text from .pdf files."""
     try:
-        from PyPDF2 import PdfReader
+        from pypdf import PdfReader
 
         reader = PdfReader(io.BytesIO(file_bytes))
         pages = []

@@ -12,6 +12,8 @@ if _is_sqlite:
         settings.database_url,
         echo=False,
         connect_args={"check_same_thread": False},
+        pool_recycle=300,
+        pool_pre_ping=True,
     )
 else:
     engine = create_async_engine(
