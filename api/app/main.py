@@ -7,13 +7,16 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
-from app.database import engine, Base
+from app.database import engine, Base, get_db
+from app.models.user import User
+from app.services.auth_service import get_current_user
 from app.routers import auth, features, jobs, reviews, clients, users, usage, stream, vault
 
 logger = logging.getLogger(__name__)
@@ -181,6 +184,88 @@ async def root():
 
 
 @app.get("/api/v1/dashboard/overview")
-async def dashboard_overview():
-    """Placeholder for dashboard data."""
-    return {"message": "Dashboard endpoint — to be implemented in P2"}
+async def dashboard_overview(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Dashboard overview: KPIs, recent jobs, pending reviews."""
+    from datetime import datetime, timezone
+    from sqlalchemy import select, func, extract
+    from app.models.job import Job, JobStatus
+    from app.models.client import Client
+    from app.models.review import Review, ReviewStatus
+    from app.services.usage_service import UsageService
+
+    tenant_id = str(user.tenant_id)
+    now = datetime.now(timezone.utc)
+    year, month = now.year, now.month
+
+    # Total clients
+    client_count = await db.execute(
+        select(func.count(Client.id)).where(Client.tenant_id == tenant_id)
+    )
+    total_clients = client_count.scalar() or 0
+
+    # Jobs this month
+    job_month = await db.execute(
+        select(func.count(Job.id)).where(
+            Job.tenant_id == tenant_id,
+            extract("year", Job.created_at) == year,
+            extract("month", Job.created_at) == month,
+        )
+    )
+    total_jobs_this_month = job_month.scalar() or 0
+
+    # Completed jobs this month
+    completed = await db.execute(
+        select(func.count(Job.id)).where(
+            Job.tenant_id == tenant_id,
+            Job.status.in_((JobStatus.DELIVERED.value, JobStatus.APPROVED.value)),
+            extract("year", Job.created_at) == year,
+            extract("month", Job.created_at) == month,
+        )
+    )
+    completed_count = completed.scalar() or 0
+    completion_rate = round(completed_count / total_jobs_this_month * 100) if total_jobs_this_month > 0 else 0
+
+    # Token usage summary
+    svc = UsageService()
+    ym = now.strftime("%Y-%m")
+    token_usage = await svc.get_monthly_summary(db, tenant_id, ym)
+
+    # Recent jobs (last 10)
+    recent_result = await db.execute(
+        select(Job.id, Job.feature_id, Job.status, Job.created_at)
+        .where(Job.tenant_id == tenant_id)
+        .order_by(Job.created_at.desc())
+        .limit(10)
+    )
+    recent_jobs = [
+        {
+            "id": str(row.id),
+            "feature_id": row.feature_id,
+            "status": row.status,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+        }
+        for row in recent_result.all()
+    ]
+
+    # Pending reviews
+    pending_result = await db.execute(
+        select(func.count(Review.id))
+        .join(Job, Review.job_id == Job.id)
+        .where(
+            Job.tenant_id == tenant_id,
+            Review.status == ReviewStatus.PENDING.value,
+        )
+    )
+    pending_reviews = pending_result.scalar() or 0
+
+    return {
+        "total_clients": total_clients,
+        "total_jobs_this_month": total_jobs_this_month,
+        "completion_rate": completion_rate,
+        "token_usage": token_usage,
+        "recent_jobs": recent_jobs,
+        "pending_reviews": pending_reviews,
+    }
