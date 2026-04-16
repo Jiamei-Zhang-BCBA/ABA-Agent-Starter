@@ -204,7 +204,7 @@ FEATURE_REGISTRY: dict[str, FeatureModule] = {
         id="parent_letter",
         display_name="生成家书",
         description="基于近 7 天日志，生成本周给家长的「微光家书」",
-        icon="mail-heart",
+        icon="heart-handshake",
         category="家校沟通",
         form_schema=[
             FormField(name="client_id", label="选择个案", type="select_client"),
@@ -304,7 +304,7 @@ FEATURE_REGISTRY: dict[str, FeatureModule] = {
         id="assessment",
         display_name="评估记录",
         description="将专业评估（VB-MAPP/ABLLS-R 等）转化为文字版优劣势分析 + 更新核心档案能力画像",
-        icon="bar-chart",
+        icon="chart-column",
         category="建档与评估",
         form_schema=[
             FormField(name="client_id", label="选择个案", type="select_client"),
@@ -526,7 +526,7 @@ FEATURE_REGISTRY: dict[str, FeatureModule] = {
         id="transfer_protocol",
         display_name="转衔协议",
         description="生成移交协议，汇总全生命周期数据（⚠️ 不可逆：档案状态会改为「已移交」）",
-        icon="arrow-right-circle",
+        icon="circle-arrow-right",
         category="建档与评估",
         form_schema=[
             FormField(name="client_id", label="选择个案", type="select_client"),

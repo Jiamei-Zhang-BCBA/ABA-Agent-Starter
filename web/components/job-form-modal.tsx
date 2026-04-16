@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { FeatureIcon } from "@/components/feature-icon";
 import type { Feature, FormField, ExpectedOutput } from "@/types";
 
 interface JobFormModalProps {
@@ -291,8 +292,14 @@ export function JobFormModal({ feature, open, onClose, defaultClientId }: JobFor
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>
-            {feature?.icon} {feature?.display_name}
+          <DialogTitle className="flex items-center gap-2">
+            {feature && (
+              <FeatureIcon
+                name={feature.icon || "wrench"}
+                className="w-5 h-5 text-indigo-500"
+              />
+            )}
+            <span>{feature?.display_name}</span>
           </DialogTitle>
         </DialogHeader>
         {schemaLoading ? (

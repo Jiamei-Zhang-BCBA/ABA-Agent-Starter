@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StaffAssignmentPanel } from "@/components/staff-assignment-panel";
 import { VaultFileViewer } from "@/components/vault-file-viewer";
 import { JobFormModal } from "@/components/job-form-modal";
+import { FeatureIcon } from "@/components/feature-icon";
 import { getFeatureName } from "@/lib/feature-names";
 import { FolderOpen } from "lucide-react";
 import type { Client, Feature } from "@/types";
@@ -177,11 +178,14 @@ export default function ClientDetailPage() {
                   >
                     <div
                       className={
-                        "w-10 h-10 rounded-lg flex items-center justify-center shrink-0 text-lg " +
+                        "w-10 h-10 rounded-lg flex items-center justify-center shrink-0 " +
                         (danger ? "bg-red-100" : "bg-indigo-100")
                       }
                     >
-                      {feat.icon}
+                      <FeatureIcon
+                        name={feat.icon || "wrench"}
+                        className={"w-5 h-5 " + (danger ? "text-red-600" : "text-indigo-600")}
+                      />
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
