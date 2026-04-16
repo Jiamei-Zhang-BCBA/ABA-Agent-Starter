@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -11,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Building2, Users, FolderKanban, Plus } from "lucide-react";
+import { Building2, Users, FolderKanban, Plus, UserPlus, Copy, Check } from "lucide-react";
 
 interface TenantInfo {
   id: string;
@@ -20,6 +21,22 @@ interface TenantInfo {
   user_count: number;
   client_count: number;
 }
+
+interface PendingInvitation {
+  id: string;
+  email: string;
+  role: string;
+  token: string;
+  expires_at: string;
+  accept_url: string;
+}
+
+const ROLE_LABELS: Record<string, string> = {
+  org_admin: "组织管理员",
+  bcba: "BCBA / 督导",
+  teacher: "教师",
+  parent: "家长",
+};
 
 export default function AdminPage() {
   const { user } = useAuth();
@@ -39,6 +56,16 @@ export default function AdminPage() {
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState("");
   const [createSuccess, setCreateSuccess] = useState("");
+
+  // Invite-into-tenant dialog
+  const [inviteTenant, setInviteTenant] = useState<TenantInfo | null>(null);
+  const [inviteForm, setInviteForm] = useState({ email: "", role: "teacher" });
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [inviteError, setInviteError] = useState("");
+  const [inviteResult, setInviteResult] = useState<PendingInvitation | null>(null);
+  const [pendingInvitations, setPendingInvitations] = useState<PendingInvitation[]>([]);
+  const [pendingLoading, setPendingLoading] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   function loadTenants() {
     setLoading(true);
@@ -88,6 +115,57 @@ export default function AdminPage() {
       loadTenants();
     } catch (e) {
       alert(e instanceof ApiError ? e.detail : "更新失败");
+    }
+  }
+
+  async function openInviteDialog(t: TenantInfo) {
+    setInviteTenant(t);
+    setInviteForm({ email: "", role: "teacher" });
+    setInviteError("");
+    setInviteResult(null);
+    setPendingLoading(true);
+    try {
+      const res = await api.get<{ invitations: PendingInvitation[] }>(
+        `/admin/tenants/${t.id}/invitations`,
+      );
+      setPendingInvitations(res.invitations);
+    } catch {
+      setPendingInvitations([]);
+    } finally {
+      setPendingLoading(false);
+    }
+  }
+
+  async function handleSendInvite(e: React.FormEvent) {
+    e.preventDefault();
+    if (!inviteTenant) return;
+    setInviteLoading(true);
+    setInviteError("");
+    setInviteResult(null);
+    try {
+      const res = await api.post<PendingInvitation>(
+        `/admin/tenants/${inviteTenant.id}/invitations`,
+        inviteForm,
+      );
+      setInviteResult(res);
+      setPendingInvitations((prev) => [res, ...prev]);
+      setInviteForm({ email: "", role: "teacher" });
+    } catch (err) {
+      setInviteError(err instanceof ApiError ? err.detail : "邀请失败");
+    } finally {
+      setInviteLoading(false);
+    }
+  }
+
+  async function copyInviteLink(inv: PendingInvitation) {
+    const fullUrl = `${window.location.origin}${inv.accept_url}`;
+    try {
+      await navigator.clipboard.writeText(fullUrl);
+      setCopiedId(inv.id);
+      toast.success("邀请链接已复制");
+      setTimeout(() => setCopiedId(null), 2000);
+    } catch {
+      toast.error("复制失败，请手动选择链接");
     }
   }
 
@@ -162,6 +240,15 @@ export default function AdminPage() {
                     </SelectContent>
                   </Select>
                 </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full mt-1"
+                  onClick={() => openInviteDialog(t)}
+                >
+                  <UserPlus className="w-4 h-4 mr-2" />
+                  邀请用户
+                </Button>
                 <p className="text-xs text-gray-400 font-mono truncate">{t.id}</p>
               </CardContent>
             </Card>
@@ -275,6 +362,132 @@ export default function AdminPage() {
               </Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Invite Into Tenant Dialog */}
+      <Dialog open={!!inviteTenant} onOpenChange={(v) => !v && setInviteTenant(null)}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <UserPlus className="w-5 h-5 text-indigo-500" />
+              邀请用户加入「{inviteTenant?.name}」
+            </DialogTitle>
+          </DialogHeader>
+
+          <form onSubmit={handleSendInvite} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="invite_email">邮箱 *</Label>
+              <Input
+                id="invite_email"
+                type="email"
+                value={inviteForm.email}
+                onChange={(e) => setInviteForm({ ...inviteForm, email: e.target.value })}
+                placeholder="user@example.com"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>角色 *</Label>
+              <Select
+                value={inviteForm.role}
+                onValueChange={(v) => v && setInviteForm({ ...inviteForm, role: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="org_admin">组织管理员 (org_admin)</SelectItem>
+                  <SelectItem value="bcba">BCBA / 督导</SelectItem>
+                  <SelectItem value="teacher">教师</SelectItem>
+                  <SelectItem value="parent">家长</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-gray-500">
+                邀请链接 7 天有效；用户点击后自行设置姓名 + 密码
+              </p>
+            </div>
+
+            {inviteError && (
+              <Alert variant="destructive">
+                <AlertDescription>{inviteError}</AlertDescription>
+              </Alert>
+            )}
+            {inviteResult && (
+              <Alert>
+                <AlertDescription>
+                  <div className="text-green-700 font-medium mb-2">
+                    ✅ 邀请已生成，请把下方链接发给用户：
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <code className="text-xs bg-white border rounded px-2 py-1 break-all flex-1">
+                      {typeof window !== "undefined"
+                        ? `${window.location.origin}${inviteResult.accept_url}`
+                        : inviteResult.accept_url}
+                    </code>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => copyInviteLink(inviteResult)}
+                    >
+                      {copiedId === inviteResult.id ? (
+                        <Check className="w-4 h-4 text-green-600" />
+                      ) : (
+                        <Copy className="w-4 h-4" />
+                      )}
+                    </Button>
+                  </div>
+                </AlertDescription>
+              </Alert>
+            )}
+
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setInviteTenant(null)}>
+                关闭
+              </Button>
+              <Button type="submit" disabled={inviteLoading}>
+                {inviteLoading ? "发送中..." : "生成邀请链接"}
+              </Button>
+            </div>
+          </form>
+
+          {/* Pending invitations list */}
+          <div className="border-t pt-4 mt-2 space-y-2">
+            <h4 className="text-sm font-semibold text-gray-700">未接受的邀请</h4>
+            {pendingLoading ? (
+              <p className="text-xs text-gray-400">加载中...</p>
+            ) : pendingInvitations.length === 0 ? (
+              <p className="text-xs text-gray-400">暂无待接受的邀请</p>
+            ) : (
+              <ul className="space-y-1.5">
+                {pendingInvitations.map((inv) => (
+                  <li
+                    key={inv.id}
+                    className="flex items-center gap-2 text-xs border rounded px-2 py-1.5 bg-gray-50"
+                  >
+                    <span className="font-medium text-gray-700 truncate flex-1">{inv.email}</span>
+                    <Badge variant="secondary" className="text-[10px]">
+                      {ROLE_LABELS[inv.role] || inv.role}
+                    </Badge>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 px-2"
+                      onClick={() => copyInviteLink(inv)}
+                    >
+                      {copiedId === inv.id ? (
+                        <Check className="w-3 h-3 text-green-600" />
+                      ) : (
+                        <Copy className="w-3 h-3" />
+                      )}
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </div>

@@ -4,18 +4,28 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.user import User, UserRole
 from app.models.tenant import Tenant, Plan
+from app.models.invitation import Invitation
 from app.services.auth_service import require_super_admin
 from app.services import user_service
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
+
+# Roles that super-admin can invite into a target tenant (covers org_admin
+# so an organization can be re-seeded with a new admin if needed).
+_INVITABLE_ROLES = {
+    UserRole.ORG_ADMIN.value,
+    UserRole.BCBA.value,
+    UserRole.TEACHER.value,
+    UserRole.PARENT.value,
+}
 
 
 # ---------------------------------------------------------------------------
@@ -43,6 +53,20 @@ class TenantResponse(BaseModel):
 
 class PlanUpdateRequest(BaseModel):
     plan_name: str
+
+
+class TenantInvitationRequest(BaseModel):
+    email: str = Field(..., min_length=3, max_length=200)
+    role: str = Field(..., description="org_admin | bcba | teacher | parent")
+
+
+class TenantInvitationResponse(BaseModel):
+    id: str
+    email: str
+    role: str
+    token: str
+    expires_at: str
+    accept_url: str | None = None  # full /invite?token=... path for sharing
 
 
 # ---------------------------------------------------------------------------
@@ -134,6 +158,100 @@ async def update_tenant_plan(
 
     logger.info("Super-admin %s changed tenant %s plan to %s", user.email, tenant_id, req.plan_name)
     return {"tenant_id": tenant_id, "plan_name": req.plan_name, "message": "套餐已更新"}
+
+
+# ---------------------------------------------------------------------------
+# Cross-tenant user invitation (super-admin only)
+# ---------------------------------------------------------------------------
+
+@router.post(
+    "/tenants/{tenant_id}/invitations",
+    response_model=TenantInvitationResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_tenant_invitation(
+    tenant_id: str,
+    req: TenantInvitationRequest,
+    user: User = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Super-admin: invite a user (any role) into the specified tenant.
+
+    Returns the raw invitation token plus a relative accept URL the
+    super-admin can share with the invitee.
+    """
+    if req.role not in _INVITABLE_ROLES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"无效角色：{req.role}（允许：{', '.join(sorted(_INVITABLE_ROLES))}）",
+        )
+
+    # Verify tenant exists
+    tenant_result = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
+    if tenant_result.scalar_one_or_none() is None:
+        raise HTTPException(status_code=404, detail="租户不存在")
+
+    try:
+        invitation = await user_service.create_invitation(
+            db,
+            inviter=user,
+            email=req.email,
+            role=req.role,
+            target_tenant_id=tenant_id,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    logger.info(
+        "Super-admin %s invited %s as %s into tenant %s",
+        user.email, req.email, req.role, tenant_id,
+    )
+
+    return TenantInvitationResponse(
+        id=str(invitation.id),
+        email=invitation.email,
+        role=invitation.role,
+        token=invitation.token,
+        expires_at=invitation.expires_at.isoformat(),
+        accept_url=f"/invite?token={invitation.token}",
+    )
+
+
+@router.get("/tenants/{tenant_id}/invitations")
+async def list_tenant_invitations(
+    tenant_id: str,
+    user: User = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Super-admin: list pending (un-accepted, un-expired) invitations for a tenant."""
+    from datetime import datetime
+    now = datetime.utcnow()
+
+    stmt = (
+        select(Invitation)
+        .where(
+            Invitation.tenant_id == tenant_id,
+            Invitation.accepted_at.is_(None),
+            Invitation.expires_at > now,
+        )
+        .order_by(Invitation.expires_at.desc())
+    )
+    result = await db.execute(stmt)
+    invitations = result.scalars().all()
+
+    return {
+        "invitations": [
+            {
+                "id": str(inv.id),
+                "email": inv.email,
+                "role": inv.role,
+                "token": inv.token,
+                "expires_at": inv.expires_at.isoformat(),
+                "accept_url": f"/invite?token={inv.token}",
+            }
+            for inv in invitations
+        ]
+    }
 
 
 @router.get("/auth-config")

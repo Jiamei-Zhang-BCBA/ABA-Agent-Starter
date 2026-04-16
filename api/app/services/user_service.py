@@ -90,21 +90,32 @@ async def create_invitation(
     inviter: User,
     email: str,
     role: str,
+    target_tenant_id: str | None = None,
 ) -> Invitation:
-    """Create an invitation for a new user to join the tenant."""
-    # Validate role (org_admin cannot be invited, must register)
-    if role == UserRole.ORG_ADMIN.value:
+    """
+    Create an invitation for a new user to join a tenant.
+
+    By default the invitation goes to the inviter's own tenant. If
+    `target_tenant_id` is provided, the invitation goes to that tenant
+    instead — used by super-admin to seed users into any organization.
+    """
+    # Org-admin invitations are only allowed via the super-admin path
+    # (target_tenant_id explicitly set), since regular org_admins create
+    # peers via the tenant-registration flow.
+    if role == UserRole.ORG_ADMIN.value and target_tenant_id is None:
         raise ValueError("不能邀请 org_admin 角色，请通过注册创建")
 
-    # Check email not already in this tenant
+    tenant_id = target_tenant_id or inviter.tenant_id
+
+    # Check email not already in target tenant
     existing = await db.execute(
-        select(User).where(User.email == email, User.tenant_id == inviter.tenant_id)
+        select(User).where(User.email == email, User.tenant_id == tenant_id)
     )
     if existing.scalar_one_or_none() is not None:
-        raise ValueError("该邮箱已在本机构注册")
+        raise ValueError("该邮箱已在该机构注册")
 
     invitation = Invitation(
-        tenant_id=inviter.tenant_id,
+        tenant_id=tenant_id,
         email=email,
         role=role,
         token=secrets.token_urlsafe(32),
@@ -114,9 +125,15 @@ async def create_invitation(
     db.add(invitation)
     await db.flush()
     await log_action(
-        db, tenant_id=str(inviter.tenant_id), user_id=str(inviter.id),
-        action="user.invited", resource_type="invitation", resource_id=str(invitation.id),
-        detail={"email": email, "role": role},
+        db, tenant_id=str(tenant_id), user_id=str(inviter.id),
+        action="user.invited",
+        resource_type="invitation",
+        resource_id=str(invitation.id),
+        detail={
+            "email": email,
+            "role": role,
+            "by_super_admin": target_tenant_id is not None,
+        },
     )
     await db.commit()
     await db.refresh(invitation)
