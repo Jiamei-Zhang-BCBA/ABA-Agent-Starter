@@ -373,6 +373,7 @@ def write_output_to_vault(
     ))
 
     if file_markers:
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         for i, marker in enumerate(file_markers):
             path = marker.group(1).strip()
             is_append = marker.group(2) is not None
@@ -382,6 +383,43 @@ def write_output_to_vault(
 
             if not file_content:
                 continue
+
+            # Normalize placeholders that Claude may have left literal.
+            # e.g. "01-Clients/Client-[代号]/Client-[代号]-xxx.md" → real code
+            if client_code:
+                path = (
+                    path
+                    .replace("[代号]", client_code)
+                    .replace("[儿童代号]", client_code)
+                    .replace("[儿童昵称]", client_code)
+                    .replace("{code}", client_code)
+                    .replace("{{代号}}", client_code)
+                )
+            path = (
+                path
+                .replace("{{当前日期}}", today)
+                .replace("[当前日期]", today)
+                .replace("{today}", today)
+            )
+
+            # Guard: if the path still points to a *different* client folder than the bound
+            # client_code (e.g. Claude insisted on "Client-Demo-乐乐" from the upload body),
+            # rewrite it onto the bound client's folder to protect data isolation.
+            if client_code:
+                expected_prefix = f"Client-{client_code}"
+                # Look for any 01-Clients/Client-xxx/ segment and rewrite it
+                m = re.match(r'^(01-Clients/)(Client-[^/]+)(/.*)$', path)
+                if m and m.group(2) != expected_prefix:
+                    wrong = m.group(2)
+                    # Replace the folder and any occurrences of the wrong prefix in the filename
+                    new_path = f"{m.group(1)}{expected_prefix}{m.group(3)}".replace(
+                        wrong, expected_prefix
+                    )
+                    logger.warning(
+                        "Path rewrite: '%s' → '%s' (client binding enforced)",
+                        path, new_path,
+                    )
+                    path = new_path
 
             try:
                 if is_append:

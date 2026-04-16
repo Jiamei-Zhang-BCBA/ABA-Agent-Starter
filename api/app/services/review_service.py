@@ -305,9 +305,12 @@ def ai_revise_content(content: str, instruction: str, vault_path: str | None = N
         try:
             output_data = json.loads(proc.stdout)
             revised = output_data.get("result", "")
-            input_tokens = output_data.get("input_tokens", 0)
-            output_tokens = output_data.get("output_tokens", 0)
-        except (json.JSONDecodeError, KeyError):
+            usage = output_data.get("usage") or {}
+            input_tokens = int(usage.get("input_tokens", 0) or 0)
+            output_tokens = int(usage.get("output_tokens", 0) or 0)
+            input_tokens += int(usage.get("cache_read_input_tokens", 0) or 0)
+            input_tokens += int(usage.get("cache_creation_input_tokens", 0) or 0)
+        except (json.JSONDecodeError, KeyError, TypeError):
             revised = proc.stdout.strip()
             input_tokens = 0
             output_tokens = 0

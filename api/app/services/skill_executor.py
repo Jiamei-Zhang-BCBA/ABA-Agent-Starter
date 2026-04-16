@@ -158,7 +158,7 @@ class SkillExecutor:
 
         system_prompt = self._build_system_prompt(claude_md, config_md, skill_md)
         vault_context = self._load_vault_context(feature, client_code)
-        user_message = self._build_user_message(form_data, parsed_uploads, vault_context)
+        user_message = self._build_user_message(form_data, parsed_uploads, vault_context, client_code)
 
         # --- Phase 2: Call Claude ---
         if self._mode == "cli":
@@ -237,12 +237,17 @@ class SkillExecutor:
                 raise RuntimeError(f"Claude CLI failed: {error_msg}")
 
             # Parse JSON output
+            # Claude CLI JSON shape: { "result": "...", "usage": { "input_tokens": N, "output_tokens": N, "cache_read_input_tokens": N, "cache_creation_input_tokens": N }, ... }
             try:
                 output_data = json.loads(proc.stdout)
                 raw_output = output_data.get("result", "")
-                input_tokens = output_data.get("input_tokens", 0)
-                output_tokens = output_data.get("output_tokens", 0)
-            except (json.JSONDecodeError, KeyError):
+                usage = output_data.get("usage") or {}
+                input_tokens = int(usage.get("input_tokens", 0) or 0)
+                output_tokens = int(usage.get("output_tokens", 0) or 0)
+                # Cache tokens still count toward quota, include them
+                input_tokens += int(usage.get("cache_read_input_tokens", 0) or 0)
+                input_tokens += int(usage.get("cache_creation_input_tokens", 0) or 0)
+            except (json.JSONDecodeError, KeyError, TypeError):
                 raw_output = proc.stdout.strip()
                 input_tokens = 0
                 output_tokens = 0
@@ -337,6 +342,15 @@ class SkillExecutor:
 - 路径中的 `[教师姓名]`、`[儿童昵称]` 等占位符替换为实际值
 - `{{当前日期}}` 替换为实际日期
 
+## ⚠️ 数据优先级（冲突时的取舍原则）
+当上传的原始资料与下方「表单信息」/「档案代号绑定」存在冲突时，按以下优先级处理：
+
+1. **档案代号、文件路径 → 以表单 / 绑定值为准**（不可协商）
+2. **儿童昵称、年龄等身份字段 → 以表单为准**，原始资料里的不同昵称仅作"备注"保留
+3. **临床观察内容（如发育史、行为描述、强化物）→ 以原始资料为准**
+
+即：**路径和代号 100% 跟随表单，内容 100% 跟随原始资料，冲突点在文末「备注」标注即可，不要改路径。**
+
 ## 注意
 - 不要讨论路径是否存在、环境配置等问题 — 服务端会自动创建目录
 - 不要输出 Shell 指令或 Claude Code 工具调用
@@ -348,11 +362,26 @@ class SkillExecutor:
         form_data: dict[str, Any],
         parsed_uploads: list[str],
         vault_context: str,
+        client_code: str | None = None,
     ) -> str:
         """Assemble the user message from form data, uploads, and vault context."""
         parts = [
             "请根据技能要求生成业务文档。如需创建多个文件，使用 `<!-- FILE: 路径 -->` 分隔。"
         ]
+
+        # Hard-bind the client code so Claude cannot infer a different one from the raw uploads.
+        # This prevents cases like: form says "石头2" but upload body mentions "乐乐" → output goes to wrong folder.
+        if client_code:
+            parts.append(
+                "## ⚠️ 档案代号绑定（强制规则）\n\n"
+                f"本次任务的档案代号**必须**使用：`Client-{client_code}`\n\n"
+                "- 所有 `<!-- FILE: 路径 -->` 标记中的路径占位符 `[代号]` 一律替换为 "
+                f"`{client_code}`。\n"
+                f"- 文档正文中所有 `Client-[代号]` 或 `[[Client-代号-xxx]]` 的占位符也替换为 `Client-{client_code}`。\n"
+                "- **即使上传的原始资料正文里出现其他昵称/代号，也必须以表单传入的代号为准**；"
+                "如发现正文与表单冲突，在文档末尾的"
+                "「备注」中标注该差异即可，切勿修改路径/档案代号。\n"
+            )
 
         if vault_context:
             parts.append(f"## 个案上下文\n\n{vault_context}")

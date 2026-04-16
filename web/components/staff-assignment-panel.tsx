@@ -53,18 +53,41 @@ export function StaffAssignmentPanel({ clientId }: StaffAssignmentPanelProps) {
     fetchAssignments();
   }, [fetchAssignments]);
 
+  const loadStaffForRelation = useCallback(
+    (relation: string) => {
+      // When assigning a parent, the staff list must include parent users too.
+      const qs = relation === "parent" ? "?include_parents=true" : "";
+      api
+        .get<{ staff: Staff[] }>(`/staff${qs}`)
+        .then((res) => {
+          const assignedIds = new Set(assignments.map((a) => a.user_id));
+          // Only show users whose role matches the chosen relation
+          // (teacher relation → teacher/bcba; parent relation → parent).
+          const roleFilter =
+            relation === "parent"
+              ? (r: string) => r === "parent"
+              : (r: string) => r === "teacher" || r === "bcba";
+          setStaff(
+            res.staff.filter((s) => !assignedIds.has(s.id) && roleFilter(s.role)),
+          );
+        })
+        .catch(() => {});
+    },
+    [assignments],
+  );
+
   function openAssignDialog() {
     setSelectedUserId("");
     setSelectedRelation("teacher");
-    api
-      .get<{ staff: Staff[] }>("/staff")
-      .then((res) => {
-        // Exclude already assigned users
-        const assignedIds = new Set(assignments.map((a) => a.user_id));
-        setStaff(res.staff.filter((s) => !assignedIds.has(s.id)));
-      })
-      .catch(() => {});
+    loadStaffForRelation("teacher");
     setDialogOpen(true);
+  }
+
+  function handleRelationChange(v: string) {
+    if (!v) return;
+    setSelectedRelation(v);
+    setSelectedUserId(""); // reset selection since the list will change
+    loadStaffForRelation(v);
   }
 
   async function handleAssign() {
@@ -173,7 +196,7 @@ export function StaffAssignmentPanel({ clientId }: StaffAssignmentPanelProps) {
             </div>
             <div className="space-y-2">
               <Label>关系</Label>
-              <Select value={selectedRelation} onValueChange={(v) => v && setSelectedRelation(v)}>
+              <Select value={selectedRelation} onValueChange={handleRelationChange}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>

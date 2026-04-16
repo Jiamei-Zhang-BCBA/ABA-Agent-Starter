@@ -348,13 +348,21 @@ async def delete_assignment(
 
 @router.get("/staff")
 async def list_staff(
+    include_parents: bool = False,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """List staff (teachers + BCBAs) for the current tenant."""
+    """List assignable users for the current tenant.
+    Default: teachers + BCBAs. Pass ?include_parents=true to also include parents
+    (needed when assigning parent role in StaffAssignmentPanel).
+    """
+    roles: list[UserRole] = [UserRole.TEACHER, UserRole.BCBA]
+    if include_parents:
+        roles.append(UserRole.PARENT)
     stmt = select(User).where(
         User.tenant_id == user.tenant_id,
-        User.role.in_([UserRole.TEACHER, UserRole.BCBA]),
+        User.is_active == True,  # noqa: E712  — SQLAlchemy column compare
+        User.role.in_(roles),
     )
     result = await db.execute(stmt)
     staff = result.scalars().all()
