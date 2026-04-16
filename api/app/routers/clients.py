@@ -29,11 +29,11 @@ router = APIRouter(prefix="/api/v1", tags=["clients"])
 _VAULT_DIRS_SUPERVISOR = {
     "档案": "01-Clients/Client-{code}",
     "日志": "02-Sessions/Client-{code}-日志库",
-    "沟通": "05-Communication/Client-{code}",
+    "沟通": "05-Communication/Client-{code}-沟通记录",
 }
 _VAULT_DIRS_TEACHER = {
     "日志": "02-Sessions/Client-{code}-日志库",
-    "沟通": "05-Communication/Client-{code}",
+    "沟通": "05-Communication/Client-{code}-沟通记录",
 }
 
 
@@ -195,12 +195,14 @@ async def get_client_timeline(
 
     vault_files = {}
     for label, path_tpl in dirs.items():
-        path = path_tpl.format(code=code)
+        dir_path = path_tpl.format(code=code)
         try:
-            items = vault.list_directory(path)
+            items = vault.list_directory(dir_path)
             vault_files[label] = [
-                item["name"] for item in items
-                if item["name"] not in ("placeholder.md", ".gitkeep")
+                {"name": item["name"], "path": item["path"]}
+                for item in items
+                if item["name"] not in ("placeholder.md", ".gitkeep", "README.md")
+                and item["type"] == "file"
             ]
         except Exception:
             vault_files[label] = []

@@ -15,6 +15,7 @@ import { getFeatureName } from "@/lib/feature-names";
 import {
   FolderOpen, ClipboardCheck, Mail, Zap, BookOpen,
   UserPlus, BarChart3, Target, Brain, Sparkles, Award,
+  FileEdit, Scissors, NotebookPen,
 } from "lucide-react";
 import type { Client } from "@/types";
 
@@ -49,10 +50,15 @@ interface TimelineEntry {
   has_output: boolean;
 }
 
+interface VaultFileEntry {
+  name: string;
+  path: string;
+}
+
 interface TimelineResponse {
   client: Client;
   timeline: TimelineEntry[];
-  vault_files: Record<string, string[]>;
+  vault_files: Record<string, VaultFileEntry[]>;
   total_jobs: number;
   completed_jobs: number;
 }
@@ -69,6 +75,9 @@ const ICON_MAP: Record<string, React.ElementType> = {
   "brain": Brain,
   "sparkles": Sparkles,
   "award": Award,
+  "file-edit": FileEdit,
+  "scissors": Scissors,
+  "notebook-pen": NotebookPen,
 };
 
 interface QuickAction {
@@ -79,6 +88,7 @@ interface QuickAction {
 }
 
 const QUICK_ACTIONS: QuickAction[] = [
+  { featureId: "intake", label: "初访建档", icon: "file-edit", description: "处理初访记录，创建个案档案" },
   { featureId: "session_review", label: "课后记录分析", icon: "clipboard-check", description: "分析老师提交的课后记录" },
   { featureId: "parent_letter", label: "写家书", icon: "mail-heart", description: "生成家长反馈信" },
   { featureId: "quick_summary", label: "战前简报", icon: "zap", description: "会议前快速汇总个案情报" },
@@ -86,8 +96,11 @@ const QUICK_ACTIONS: QuickAction[] = [
   { featureId: "assessment", label: "评估记录", icon: "bar-chart", description: "录入并分析评估数据" },
   { featureId: "fba", label: "功能行为分析", icon: "brain", description: "分析问题行为的功能" },
   { featureId: "plan_generator", label: "制定IEP", icon: "target", description: "生成个别化教育计划" },
+  { featureId: "program_slicer", label: "教学切片", icon: "scissors", description: "将IEP目标拆解为教学切片" },
   { featureId: "reinforcer", label: "强化物评估", icon: "sparkles", description: "更新强化物偏好清单" },
+  { featureId: "clinical_reflection", label: "临床复盘", icon: "notebook-pen", description: "周复盘与SOP迭代" },
   { featureId: "milestone_report", label: "阶段报告", icon: "award", description: "生成里程碑报告和喜报" },
+  { featureId: "staff_supervision", label: "听课督导", icon: "user-plus", description: "整理听课反馈与教师成长记录" },
 ];
 
 export default function ClientDetailPage() {
@@ -120,9 +133,8 @@ export default function ClientDetailPage() {
       .catch(() => {});
   }, []);
 
-  function openFileViewer(dirLabel: string, filename: string) {
-    const path = `${dirLabel}/${filename}`;
-    setViewerPath(path);
+  function openFileViewer(vaultPath: string) {
+    setViewerPath(vaultPath);
     setViewerOpen(true);
   }
 
@@ -265,13 +277,13 @@ export default function ClientDetailPage() {
                     ) : (
                       <ul className="space-y-1">
                         {files.map((f) => (
-                          <li key={f} className="text-sm">
+                          <li key={f.path} className="text-sm">
                             <button
                               className="text-indigo-600 hover:text-indigo-800 hover:underline flex items-center"
-                              onClick={() => openFileViewer(label, f)}
+                              onClick={() => openFileViewer(f.path)}
                             >
                               <span className="mr-2">📄</span>
-                              {f}
+                              {f.name}
                             </button>
                           </li>
                         ))}

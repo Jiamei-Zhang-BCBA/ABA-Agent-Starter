@@ -26,6 +26,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/jobs", label: "任务记录" },
   { href: "/reviews", label: "审核队列", roles: ["org_admin", "bcba"] },
   { href: "/users", label: "用户管理", roles: ["org_admin"] },
+  { href: "/admin", label: "系统管理", roles: ["org_admin"] },
 ];
 
 export function NavBar() {
