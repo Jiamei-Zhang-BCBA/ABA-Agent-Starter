@@ -104,6 +104,19 @@ async def create_job(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+    # BUG #13/#15: 把 staff_id (uuid) 解析为 staff_name 注入 form_data
+    # AI 完全不认 uuid，必须把人类可读的姓名传给它，FILE marker 路径才不会写错
+    if "staff_id" in parsed_form and parsed_form["staff_id"]:
+        from app.models.user import User as UserModel
+        s_result = await db.execute(
+            select(UserModel).where(
+                UserModel.id == parsed_form["staff_id"],
+                UserModel.tenant_id == user.tenant_id,
+            )
+        )
+        if (staff_obj := s_result.scalar_one_or_none()):
+            parsed_form["staff_name"] = staff_obj.name
+
     # Validate client access for teacher/parent roles
     parsed_client_id = None
     if client_id:

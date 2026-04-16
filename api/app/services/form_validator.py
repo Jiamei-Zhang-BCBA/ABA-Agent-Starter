@@ -51,6 +51,9 @@ def validate_form_data(feature_id: str, form_data: dict, uploaded_filenames: lis
 
         # select_client / select_staff are dynamic options handled by router
         if field.type in ("select_client", "select_staff"):
+            # BUG #14: required 检查之前完全缺失，导致前端漏传也能 201 通过
+            if field.required and (not value or str(value).strip() == ""):
+                raise ValueError(f"必填字段缺失: {field.label}")
             if value:
                 validated[field.name] = str(value)
             continue

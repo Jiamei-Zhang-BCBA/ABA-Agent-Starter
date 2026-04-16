@@ -235,7 +235,7 @@ class SkillExecutor:
                 input=prompt_text,
                 capture_output=True,
                 text=True,
-                timeout=300,
+                timeout=int(getattr(settings, "job_timeout_seconds", 600)),
                 encoding="utf-8",
             )
 
@@ -400,6 +400,18 @@ class SkillExecutor:
                 "- **即使上传的原始资料正文里出现其他昵称/代号，也必须以表单传入的代号为准**；"
                 "如发现正文与表单冲突，在文档末尾的"
                 "「备注」中标注该差异即可，切勿修改路径/档案代号。\n"
+            )
+
+        # BUG #13/#15: Hard-bind staff name (resolved from staff_id uuid in jobs.py).
+        # 没有这条规则，AI 会拿 vault 里已知的教师名 fallback，或写"教师待指定"。
+        if (staff_name := form_data.get("staff_name")):
+            parts.append(
+                "## ⚠️ 教师姓名绑定（强制规则）\n\n"
+                f"本次任务的执行教师**必须**使用：`{staff_name}`\n\n"
+                f"- 所有 `<!-- FILE: 路径 -->` 标记中的 `[姓名]` / `教师-[姓名]` 占位符一律替换为 `{staff_name}`。\n"
+                f"- 文档正文中的 `[[教师-XX]]` wikilink 也使用 `[[教师-{staff_name}]]`。\n"
+                f"- 路径 `03-Staff/教师-[姓名]/` 一律写成 `03-Staff/教师-{staff_name}/`。\n"
+                "- **即使 vault 上下文里出现其他教师名，也必须以表单传入的姓名为准**。\n"
             )
 
         if vault_context:

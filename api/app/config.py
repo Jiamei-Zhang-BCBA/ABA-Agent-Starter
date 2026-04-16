@@ -61,6 +61,12 @@ class Settings(BaseSettings):
     claude_md_path: str = "D:/OneDrive/wxob/ABA-Agent-Starter/CLAUDE.md"
     config_md_path: str = "D:/OneDrive/wxob/ABA-Agent-Starter/.claude/skills/_config.md"
 
+    # Job processing timeouts
+    # 600s 足够 sonnet expert tier 大上下文 skill (fba/plan_generator/milestone_report/transfer_protocol)
+    job_timeout_seconds: int = 600
+    job_max_retries: int = 2
+    job_retry_delay_seconds: int = 30
+
     model_config = {"env_file": ".env", "extra": "ignore"}
 
     @model_validator(mode="after")
