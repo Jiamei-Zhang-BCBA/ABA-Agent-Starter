@@ -12,11 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StaffAssignmentPanel } from "@/components/staff-assignment-panel";
 import { VaultFileViewer } from "@/components/vault-file-viewer";
 import { getFeatureName } from "@/lib/feature-names";
-import {
-  FolderOpen, ClipboardCheck, Mail, Zap, BookOpen,
-  UserPlus, BarChart3, Target, Brain, Sparkles, Award,
-  FileEdit, Scissors, NotebookPen,
-} from "lucide-react";
+import { FolderOpen } from "lucide-react";
 import type { Client } from "@/types";
 
 function formatTime(iso: string) {
@@ -63,45 +59,14 @@ interface TimelineResponse {
   completed_jobs: number;
 }
 
-// Quick action definitions for the "操作" tab
-const ICON_MAP: Record<string, React.ElementType> = {
-  "clipboard-check": ClipboardCheck,
-  "mail-heart": Mail,
-  "zap": Zap,
-  "book-open": BookOpen,
-  "user-plus": UserPlus,
-  "bar-chart": BarChart3,
-  "target": Target,
-  "brain": Brain,
-  "sparkles": Sparkles,
-  "award": Award,
-  "file-edit": FileEdit,
-  "scissors": Scissors,
-  "notebook-pen": NotebookPen,
-};
-
-interface QuickAction {
-  featureId: string;
-  label: string;
-  icon: string;
+// Feature type from API
+interface FeatureItem {
+  id: string;
+  display_name: string;
   description: string;
+  icon: string;
+  category: string;
 }
-
-const QUICK_ACTIONS: QuickAction[] = [
-  { featureId: "intake", label: "初访建档", icon: "file-edit", description: "处理初访记录，创建个案档案" },
-  { featureId: "session_review", label: "课后记录分析", icon: "clipboard-check", description: "分析老师提交的课后记录" },
-  { featureId: "parent_letter", label: "写家书", icon: "mail-heart", description: "生成家长反馈信" },
-  { featureId: "quick_summary", label: "战前简报", icon: "zap", description: "会议前快速汇总个案情报" },
-  { featureId: "teacher_guide", label: "实操指引", icon: "book-open", description: "为老师生成实操小抄" },
-  { featureId: "assessment", label: "评估记录", icon: "bar-chart", description: "录入并分析评估数据" },
-  { featureId: "fba", label: "功能行为分析", icon: "brain", description: "分析问题行为的功能" },
-  { featureId: "plan_generator", label: "制定IEP", icon: "target", description: "生成个别化教育计划" },
-  { featureId: "program_slicer", label: "教学切片", icon: "scissors", description: "将IEP目标拆解为教学切片" },
-  { featureId: "reinforcer", label: "强化物评估", icon: "sparkles", description: "更新强化物偏好清单" },
-  { featureId: "clinical_reflection", label: "临床复盘", icon: "notebook-pen", description: "周复盘与SOP迭代" },
-  { featureId: "milestone_report", label: "阶段报告", icon: "award", description: "生成里程碑报告和喜报" },
-  { featureId: "staff_supervision", label: "听课督导", icon: "user-plus", description: "整理听课反馈与教师成长记录" },
-];
 
 export default function ClientDetailPage() {
   const params = useParams();
@@ -113,25 +78,29 @@ export default function ClientDetailPage() {
   const [viewerPath, setViewerPath] = useState<string | null>(null);
   const [viewerOpen, setViewerOpen] = useState(false);
 
-  // Visible features for this user
-  const [visibleFeatureIds, setVisibleFeatureIds] = useState<string[]>([]);
+  // Features visible to this user (from API, includes all plan features)
+  const [features, setFeatures] = useState<FeatureItem[]>([]);
+  const [featuresLoaded, setFeaturesLoaded] = useState(false);
 
+  // Load timeline and features in parallel, only show page when both done
   useEffect(() => {
     if (!clientId) return;
-    api
+
+    const loadTimeline = api
       .get<TimelineResponse>(`/clients/${clientId}/timeline`)
       .then(setData)
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [clientId]);
-
-  // Fetch user's visible features to filter quick actions
-  useEffect(() => {
-    api
-      .get<{ features: Array<{ id: string }> }>("/features")
-      .then((res) => setVisibleFeatureIds(res.features.map((f) => f.id)))
       .catch(() => {});
-  }, []);
+
+    const loadFeatures = api
+      .get<{ features: FeatureItem[] }>("/features")
+      .then((res) => {
+        setFeatures(res.features);
+        setFeaturesLoaded(true);
+      })
+      .catch(() => setFeaturesLoaded(true));
+
+    Promise.all([loadTimeline, loadFeatures]).finally(() => setLoading(false));
+  }, [clientId]);
 
   function openFileViewer(vaultPath: string) {
     setViewerPath(vaultPath);
@@ -179,38 +148,36 @@ export default function ClientDetailPage() {
 
         {/* Actions Tab */}
         <TabsContent value="actions" className="mt-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {QUICK_ACTIONS.filter((a) => visibleFeatureIds.includes(a.featureId)).map(
-              (action) => {
-                const Icon = ICON_MAP[action.icon] || Zap;
-                return (
-                  <button
-                    key={action.featureId}
-                    onClick={() =>
-                      router.push(
-                        `/features?feature=${action.featureId}&client_id=${clientId}`
-                      )
-                    }
-                    className="flex items-start gap-3 p-4 rounded-lg border bg-white hover:bg-indigo-50 hover:border-indigo-200 transition text-left"
-                  >
-                    <div className="w-10 h-10 rounded-lg bg-indigo-100 flex items-center justify-center shrink-0">
-                      <Icon className="w-5 h-5 text-indigo-600" />
-                    </div>
-                    <div>
-                      <p className="font-medium text-sm text-gray-900">
-                        {action.label}
-                      </p>
-                      <p className="text-xs text-gray-500 mt-0.5">
-                        {action.description}
-                      </p>
-                    </div>
-                  </button>
-                );
-              }
-            )}
-          </div>
-          {visibleFeatureIds.length === 0 && (
-            <div className="text-center py-8 text-gray-400">加载中...</div>
+          {!featuresLoaded ? (
+            <div className="text-center py-8 text-gray-400">加载功能列表中...</div>
+          ) : features.length === 0 ? (
+            <div className="text-center py-8 text-gray-400">暂无可用功能</div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {features.map((feat) => (
+                <button
+                  key={feat.id}
+                  onClick={() =>
+                    router.push(
+                      `/features?feature=${feat.id}&client_id=${clientId}`
+                    )
+                  }
+                  className="flex items-start gap-3 p-4 rounded-lg border bg-white hover:bg-indigo-50 hover:border-indigo-200 transition text-left"
+                >
+                  <div className="w-10 h-10 rounded-lg bg-indigo-100 flex items-center justify-center shrink-0 text-lg">
+                    {feat.icon}
+                  </div>
+                  <div>
+                    <p className="font-medium text-sm text-gray-900">
+                      {feat.display_name}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">
+                      {feat.description}
+                    </p>
+                  </div>
+                </button>
+              ))}
+            </div>
           )}
         </TabsContent>
 
