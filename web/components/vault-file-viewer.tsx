@@ -58,7 +58,7 @@ export function VaultFileViewer({ path, open, onOpenChange }: VaultFileViewerPro
 
   return (
     <Sheet open={open} onOpenChange={handleOpenChange}>
-      <SheetContent className="w-full sm:max-w-2xl overflow-y-auto">
+      <SheetContent className="w-full sm:max-w-[50vw] overflow-y-auto">
         <SheetHeader>
           <SheetTitle className="text-sm font-mono truncate">
             {path || "文件预览"}

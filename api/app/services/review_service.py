@@ -134,20 +134,24 @@ async def approve_review(
         vault = create_vault_service(str(job.tenant_id))
         feature = get_feature(job.feature_id)
         if feature:
+            # Determine client_code: prefer form_data (always available), fallback to DB
             client_code = ""
-            if job.client_id:
+            if job.form_data_json:
+                alias = job.form_data_json.get("child_alias", "")
+                if alias:
+                    client_code = f"A-{alias}"
+            if not client_code and job.client_id:
                 client_result = await db.execute(
                     select(Client).where(Client.id == job.client_id)
                 )
                 client_obj = client_result.scalar_one_or_none()
                 if client_obj:
                     client_code = client_obj.code_name
-            elif job.form_data_json:
-                alias = job.form_data_json.get("child_alias", "")
-                if alias:
-                    client_code = f"A-{alias}"
-            write_output_to_vault(vault, feature._skill_name, client_code, final_content)
-            logger.info("Wrote approved output to vault for job %s", job.id)
+            if client_code:
+                write_output_to_vault(vault, feature._skill_name, client_code, final_content)
+                logger.info("Wrote approved output to vault for job %s (client: %s)", job.id, client_code)
+            else:
+                logger.warning("No client_code for job %s, skipping vault write", job.id)
     except Exception:
         logger.exception("Failed to write approved output to vault for job %s", job.id)
 

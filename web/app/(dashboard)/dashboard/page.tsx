@@ -113,7 +113,16 @@ export default function DashboardPage() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm text-muted-foreground">个案数</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{data.total_clients}</div>
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-muted-foreground">本月任务</CardTitle>
@@ -125,85 +134,13 @@ export default function DashboardPage() {
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground">完成率</CardTitle>
+            <CardTitle className="text-sm text-muted-foreground">待审核</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{data.completion_rate}%</div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground">Token 用量</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {formatTokens(token_usage.total_input_tokens + token_usage.total_output_tokens)}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              费用 {formatCents(token_usage.total_cost_cents)}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground">个案数</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{data.total_clients}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              待审核 {data.pending_reviews}
-            </p>
+            <div className="text-2xl font-bold">{data.pending_reviews}</div>
           </CardContent>
         </Card>
       </div>
-
-      {/* Usage Chart */}
-      {daily && daily.breakdown.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">日度 Token 趋势</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={daily.breakdown}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis
-                    dataKey="date"
-                    tick={{ fontSize: 12 }}
-                    tickFormatter={(v: string) => v.slice(5)}
-                  />
-                  <YAxis tick={{ fontSize: 12 }} tickFormatter={formatTokens} />
-                  <Tooltip
-                    formatter={(value, name) => [
-                      formatTokens(Number(value)),
-                      name === "input_tokens" ? "输入" : "输出",
-                    ]}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="input_tokens"
-                    stroke="#6366f1"
-                    strokeWidth={2}
-                    dot={false}
-                    name="input_tokens"
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="output_tokens"
-                    stroke="#10b981"
-                    strokeWidth={2}
-                    dot={false}
-                    name="output_tokens"
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {/* Recent Jobs */}
       <Card>
