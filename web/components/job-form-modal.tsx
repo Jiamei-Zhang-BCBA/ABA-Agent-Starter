@@ -16,6 +16,7 @@ interface JobFormModalProps {
   feature: Feature | null;
   open: boolean;
   onClose: () => void;
+  defaultClientId?: string;
 }
 
 interface FieldOption {
@@ -32,7 +33,7 @@ interface FeatureSchema {
   form_schema: { fields: SchemaField[] };
 }
 
-export function JobFormModal({ feature, open, onClose }: JobFormModalProps) {
+export function JobFormModal({ feature, open, onClose, defaultClientId }: JobFormModalProps) {
   const router = useRouter();
   const [schema, setSchema] = useState<FeatureSchema | null>(null);
   const [formData, setFormData] = useState<Record<string, string>>({});
@@ -47,10 +48,21 @@ export function JobFormModal({ feature, open, onClose }: JobFormModalProps) {
     setFiles([]);
     api
       .get<FeatureSchema>(`/features/${feature.id}/schema`)
-      .then(setSchema)
+      .then((s) => {
+        setSchema(s);
+        // Pre-fill client field if defaultClientId is provided
+        if (defaultClientId) {
+          const clientField = s.form_schema.fields.find(
+            (f) => f.type === "select_client",
+          );
+          if (clientField) {
+            setFormData((prev) => ({ ...prev, [clientField.name]: defaultClientId }));
+          }
+        }
+      })
       .catch(() => toast.error("加载表单失败"))
       .finally(() => setSchemaLoading(false));
-  }, [feature, open]);
+  }, [feature, open, defaultClientId]);
 
   function updateField(name: string, value: string) {
     setFormData((prev) => ({ ...prev, [name]: value }));

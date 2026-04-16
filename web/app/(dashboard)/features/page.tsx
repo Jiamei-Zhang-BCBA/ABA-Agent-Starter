@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { FeatureCard } from "@/components/feature-card";
 import { JobFormModal } from "@/components/job-form-modal";
@@ -8,6 +9,10 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { Feature, FeatureListResponse } from "@/types";
 
 export default function FeaturesPage() {
+  const searchParams = useSearchParams();
+  const preselectedFeatureId = searchParams.get("feature");
+  const preselectedClientId = searchParams.get("client_id");
+
   const [features, setFeatures] = useState<Feature[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedFeature, setSelectedFeature] = useState<Feature | null>(null);
@@ -17,10 +22,20 @@ export default function FeaturesPage() {
   useEffect(() => {
     api
       .get<FeatureListResponse>("/features")
-      .then((res) => setFeatures(res.features))
+      .then((res) => {
+        setFeatures(res.features);
+        // Auto-open modal if feature is preselected from client page
+        if (preselectedFeatureId) {
+          const f = res.features.find((feat) => feat.id === preselectedFeatureId);
+          if (f) {
+            setSelectedFeature(f);
+            setModalOpen(true);
+          }
+        }
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
+  }, [preselectedFeatureId]);
 
   const categories = [
     "all",
@@ -83,6 +98,7 @@ export default function FeaturesPage() {
           setModalOpen(false);
           setSelectedFeature(null);
         }}
+        defaultClientId={preselectedClientId || undefined}
       />
     </div>
   );

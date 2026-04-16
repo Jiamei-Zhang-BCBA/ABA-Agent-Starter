@@ -1,13 +1,17 @@
 """Vault file browsing endpoints — read, download, tree, write."""
 
 import logging
-import re
+import re as re_mod
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.database import get_db
 from app.models.user import User, UserRole
+from app.models.client import Client, ClientUserLink
 from app.services.auth_service import get_current_user, require_roles
 from app.services.vault_service import create_vault_service
 
@@ -29,9 +33,32 @@ _ROLE_DIRS: dict[str, set[str]] = {
     UserRole.PARENT.value: {"05-Communication"},
 }
 
+# Roles that need client-level filtering
+_CLIENT_FILTERED_ROLES = {UserRole.TEACHER.value, UserRole.PARENT.value}
 
-def _check_vault_access(user: User, path: str) -> None:
-    """Verify user has access to the requested vault path."""
+
+def _extract_client_code(path: str) -> str | None:
+    """Extract client code_name from vault path like '01-Clients/Client-A-乐乐/...'."""
+    match = re_mod.search(r"Client-([^/]+)", path)
+    return match.group(1) if match else None
+
+
+async def _get_user_linked_codes(db: AsyncSession, user: User) -> set[str]:
+    """Get all client code_names linked to a teacher/parent user."""
+    stmt = (
+        select(Client.code_name)
+        .join(ClientUserLink, Client.id == ClientUserLink.client_id)
+        .where(
+            Client.tenant_id == str(user.tenant_id),
+            ClientUserLink.user_id == str(user.id),
+        )
+    )
+    result = await db.execute(stmt)
+    return {row[0] for row in result.all()}
+
+
+async def _check_vault_access(user: User, path: str, db: AsyncSession | None = None) -> None:
+    """Verify user has access to the requested vault path (role + client level)."""
     clean = path.strip("/").replace("\\", "/")
 
     # Block path traversal
@@ -47,14 +74,23 @@ def _check_vault_access(user: User, path: str) -> None:
     if top_dir not in allowed:
         raise HTTPException(status_code=403, detail="无权访问此目录")
 
+    # Client-level filtering for teacher/parent
+    if user.role in _CLIENT_FILTERED_ROLES and db is not None:
+        client_code = _extract_client_code(clean)
+        if client_code:
+            linked_codes = await _get_user_linked_codes(db, user)
+            if client_code not in linked_codes:
+                raise HTTPException(status_code=403, detail="无权访问该个案文件")
+
 
 @router.get("/read")
 async def read_vault_file(
     path: str = Query(...),
     user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
     """Read a vault file's content (Markdown text)."""
-    _check_vault_access(user, path)
+    await _check_vault_access(user, path, db)
 
     vault = create_vault_service(str(user.tenant_id))
     content = vault.read_file(path)
@@ -68,9 +104,10 @@ async def read_vault_file(
 async def download_vault_file(
     path: str = Query(...),
     user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
     """Download a vault file as raw bytes."""
-    _check_vault_access(user, path)
+    await _check_vault_access(user, path, db)
 
     vault = create_vault_service(str(user.tenant_id))
     content = vault.read_file(path)
@@ -78,7 +115,7 @@ async def download_vault_file(
         raise HTTPException(status_code=404, detail="文件不存在")
 
     raw_name = path.rsplit("/", 1)[-1]
-    safe_name = re.sub(r'[^\w\u4e00-\u9fff.\-]', '_', raw_name)
+    safe_name = re_mod.sub(r'[^\w\u4e00-\u9fff.\-]', '_', raw_name)
     return Response(
         content=content.encode("utf-8"),
         media_type="text/markdown; charset=utf-8",
@@ -90,9 +127,10 @@ async def download_vault_file(
 async def list_vault_tree(
     prefix: str = Query(...),
     user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
     """List files and directories under a vault path with type information."""
-    _check_vault_access(user, prefix)
+    await _check_vault_access(user, prefix, db)
 
     vault = create_vault_service(str(user.tenant_id))
     items = vault.list_directory(prefix)
@@ -101,6 +139,16 @@ async def list_vault_tree(
         item for item in items
         if not item["name"].startswith(".") and item["name"] != "placeholder.md"
     ]
+
+    # For teacher/parent: filter directory listing to only show linked clients
+    if user.role in _CLIENT_FILTERED_ROLES:
+        linked_codes = await _get_user_linked_codes(db, user)
+        filtered = []
+        for item in items:
+            code = _extract_client_code(item["name"])
+            if code is None or code in linked_codes:
+                filtered.append(item)
+        items = filtered
 
     return {"prefix": prefix, "items": items}
 
@@ -148,9 +196,10 @@ class VaultWriteRequest(BaseModel):
 async def write_vault_file(
     req: VaultWriteRequest,
     user: User = Depends(require_roles("org_admin", "bcba")),
+    db: AsyncSession = Depends(get_db),
 ):
     """Write content to an existing vault file. Only supervisors can write."""
-    _check_vault_access(user, req.path)
+    await _check_vault_access(user, req.path, db)
 
     vault = create_vault_service(str(user.tenant_id))
 
