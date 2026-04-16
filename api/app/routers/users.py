@@ -30,6 +30,12 @@ router = APIRouter(prefix="/api/v1/users", tags=["users"])
 @limiter.limit("3/hour")
 async def register(request: Request, req: TenantRegisterRequest, db: AsyncSession = Depends(get_db)):
     """Register a new organization with its first admin user."""
+    from app.config import get_settings
+    if not get_settings().registration_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="公开注册已关闭，请联系管理员",
+        )
     try:
         result = await user_service.register_tenant(
             db,

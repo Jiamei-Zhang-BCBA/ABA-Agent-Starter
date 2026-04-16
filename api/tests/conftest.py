@@ -6,6 +6,13 @@ from fastapi.testclient import TestClient
 
 # Use a dedicated test database to avoid interference with dev DB
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///./test_aba.db")
+# Enable registration and disable captcha for tests
+os.environ.setdefault("REGISTRATION_ENABLED", "true")
+os.environ.setdefault("CAPTCHA_ENABLED", "false")
+
+# Clear settings cache so test env vars take effect
+from app.config import get_settings
+get_settings.cache_clear()
 
 from app.database import engine, Base, async_session
 from app.models import *  # noqa: F401, F403 — ensure all models registered on Base

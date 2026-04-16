@@ -117,19 +117,19 @@ def test_create_job_unauthorized_feature():
     reg = _register_org("无权限测试", "unauthorized_feature@jobs-test.com")
     token = reg["access_token"]
 
-    # "fba" is a professional/enterprise only feature; starter plan does NOT include it
+    # "staff_onboarding" is an enterprise-only feature; starter plan does NOT include it
     resp = _client.post(
         "/api/v1/jobs",
         headers=_auth_header(token),
         data={
-            "feature_id": "fba",
-            "form_data": json.dumps({"behavior_description": "打人"}),
+            "feature_id": "staff_onboarding",
+            "form_data": json.dumps({"teacher_name": "张老师"}),
         },
         files={"files": ("test.txt", io.BytesIO(b"abc"), "text/plain")},
     )
 
     assert resp.status_code == 403, f"Expected 403, got {resp.status_code}: {resp.text}"
-    assert "fba" in resp.json()["detail"]
+    assert "staff_onboarding" in resp.json()["detail"]
 
 
 # ---------------------------------------------------------------------------

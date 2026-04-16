@@ -67,6 +67,13 @@ STARTER_FEATURES = [
     "parent_letter",
     "teacher_guide",
     "quick_summary",
+    "assessment",
+    "fba",
+    "plan_generator",
+    "staff_supervision",
+    "reinforcer",
+    "program_slicer",
+    "clinical_reflection",
 ]
 
 TEACHER_FEATURES = ["session_review", "teacher_guide", "quick_summary"]
@@ -284,14 +291,12 @@ class TestCheckFeatureAccess:
         # Must not raise
         check_feature_access(user, "intake")
 
-    def test_org_admin_starter_blocked_from_fba(self):
-        """org_admin on starter must be blocked from 'fba' (not in starter plan)."""
+    def test_org_admin_starter_can_access_fba(self):
+        """org_admin on starter can access 'fba' (now included in starter plan)."""
         user = _make_user("org_admin", "starter")
 
-        with pytest.raises(HTTPException) as exc_info:
-            check_feature_access(user, "fba")
-
-        assert exc_info.value.status_code == 403
+        # Must not raise — fba is in the expanded starter plan
+        check_feature_access(user, "fba")
 
     def test_teacher_enterprise_can_access_session_review(self):
         """teacher on enterprise can access session_review (in role list)."""

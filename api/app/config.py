@@ -34,6 +34,15 @@ class Settings(BaseSettings):
     cors_origins: list[str] = ["http://localhost:8000", "http://127.0.0.1:8000", "http://localhost:3000"]
     cors_origin_regex: str = ""  # e.g. "https://.*\\.vercel\\.app" for Vercel deployments
 
+    # Registration
+    registration_enabled: bool = False
+
+    # Super admin (comma-separated emails)
+    super_admin_emails: list[str] = []
+
+    # CAPTCHA
+    captcha_enabled: bool = True
+
     # Rate limiting
     rate_limit_enabled: bool = True
 

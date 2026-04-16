@@ -31,11 +31,13 @@ PLAN_CONFIGS: dict[str, PlanConfig] = {
         display_name="基础版",
         features=[
             "intake", "session_review", "parent_letter",
-            "teacher_guide", "quick_summary",
+            "teacher_guide", "quick_summary", "assessment",
+            "fba", "plan_generator", "staff_supervision",
+            "reinforcer", "program_slicer", "clinical_reflection",
         ],
-        max_clients=5,
-        max_staff=3,
-        monthly_jobs=100,
+        max_clients=10,
+        max_staff=5,
+        monthly_jobs=200,
         price_cents=19900,
     ),
     "professional": PlanConfig(

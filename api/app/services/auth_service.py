@@ -118,3 +118,14 @@ def require_roles(*roles: str):
         return user
 
     return _check
+
+
+async def require_super_admin(user: User = Depends(get_current_user)) -> User:
+    """Require user email to be in SUPER_ADMIN_EMAILS list."""
+    super_emails = get_settings().super_admin_emails
+    if user.email not in super_emails:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="需要超级管理员权限",
+        )
+    return user

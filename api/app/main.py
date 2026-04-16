@@ -17,7 +17,7 @@ from app.config import get_settings
 from app.database import engine, Base, get_db
 from app.models.user import User
 from app.services.auth_service import get_current_user
-from app.routers import auth, features, jobs, reviews, clients, users, usage, stream, vault
+from app.routers import admin, auth, features, jobs, reviews, clients, users, usage, stream, vault
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +56,27 @@ async def lifespan(app: FastAPI):
                 db.add(plan)
             await db.commit()
             logger.info("Seeded %d default plans", len(PLAN_CONFIGS))
+        else:
+            # Sync existing plans with code config (features may have changed)
+            updated = 0
+            for name, config in PLAN_CONFIGS.items():
+                plan_row = (await db.execute(
+                    select(Plan).where(Plan.name == name)
+                )).scalar_one_or_none()
+                if plan_row is None:
+                    continue
+                code_features = {
+                    "features": config.features
+                    if isinstance(config.features, list)
+                    else config.features
+                }
+                if plan_row.features_json != code_features:
+                    plan_row.features_json = code_features
+                    db.add(plan_row)
+                    updated += 1
+            if updated:
+                await db.commit()
+                logger.info("Synced %d plan feature configs", updated)
 
     # Initialize storage backend
     if settings.storage_mode == "local":
@@ -127,6 +148,7 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 
 # Register routers
+app.include_router(admin.router)
 app.include_router(auth.router)
 app.include_router(features.router)
 app.include_router(jobs.router)
