@@ -78,11 +78,13 @@ FEATURE_REGISTRY: dict[str, FeatureModule] = {
     "privacy_filter": FeatureModule(
         id="privacy_filter",
         display_name="隐私脱敏",
-        description="对包含真实姓名的原始资料进行脱敏处理",
+        description="对包含真实姓名的原始资料进行脱敏，自动维护身份映射表",
         icon="shield-check",
         category="数据安全",
         form_schema=[
             FormField(name="raw_file", label="原始资料", type="file", accept=_FILE_ACCEPT),
+            FormField(name="known_names", label="已知需脱敏的人名/学校/地名 (每行一个，提升准确率)", type="textarea", required=False),
+            FormField(name="suggested_code_name", label="建议代号 (如 A-小虎；不填则自动顺延分配)", type="text", required=False),
             FormField(name="source_description", label="资料来源说明", type="textarea", required=False),
         ],
         output_template="deidentified_record",
@@ -171,14 +173,14 @@ FEATURE_REGISTRY: dict[str, FeatureModule] = {
     "staff_supervision": FeatureModule(
         id="staff_supervision",
         display_name="听课反馈",
-        description="整理督导听课观察，生成教师反馈",
+        description="整理督导听课观察，产出教师成长档案追加 + 实操单更新（文字或文件二选一）",
         icon="eye",
         category="师资管理",
         form_schema=[
             FormField(name="client_id", label="选择个案", type="select_client"),
             FormField(name="staff_id", label="选择老师", type="select_staff"),
-            FormField(name="observation_file", label="听课记录", type="file", accept=_MEDIA_ACCEPT),
-            FormField(name="extra_note", label="补充说明", type="textarea", required=False),
+            FormField(name="observation_text", label="听课随笔 (推荐直接打字)", type="textarea", required=False),
+            FormField(name="observation_file", label="听课记录文件 (可选，与上方文字二选一)", type="file", accept=_MEDIA_ACCEPT, required=False),
         ],
         output_template="supervision_feedback",
         _skill_name="staff-supervision",
@@ -280,12 +282,13 @@ FEATURE_REGISTRY: dict[str, FeatureModule] = {
     "program_slicer": FeatureModule(
         id="program_slicer",
         display_name="教学切片",
-        description="将IEP目标拆解为微小教学步骤",
+        description="将IEP目标拆解为微小教学步骤，并产出对应教师的实操单",
         icon="scissors",
         category="方案制定",
         form_schema=[
             FormField(name="client_id", label="选择个案", type="select_client"),
-            FormField(name="target_goal", label="目标名称/编号", type="text"),
+            FormField(name="staff_id", label="目标执行教师", type="select_staff"),
+            FormField(name="target_goal", label="目标名称/编号 (如 ST 1 或目标全称)", type="text"),
             FormField(name="detail", label="补充说明", type="textarea", required=False),
         ],
         output_template="program_slice",
