@@ -93,11 +93,29 @@ export default function LoginPage() {
 
       router.push("/clients");
     } catch (err) {
-      // Refresh captcha on any login failure
-      if (config?.captcha_enabled) loadCaptcha();
+      // Only refresh CAPTCHA when the failure is actually CAPTCHA-related (400),
+      // not on credential errors (401), so the user can simply correct their
+      // password and retry without re-solving a new math problem each time.
+      const isApi = err instanceof ApiError;
+      const isCaptchaError = isApi && err.status === 400;
 
-      if (err instanceof ApiError) {
-        setError(err.detail);
+      if (config?.captcha_enabled && isCaptchaError) {
+        loadCaptcha();
+      }
+
+      // Only clear the CAPTCHA answer field; preserve email/password so users
+      // don't have to re-type credentials after a typo.
+      if (config?.captcha_enabled) {
+        setCaptchaAnswer("");
+      }
+
+      if (isApi) {
+        // Translate the most common 401 message to a user-friendly Chinese label.
+        const friendly =
+          err.status === 401 && /incorrect|invalid/i.test(err.detail)
+            ? "邮箱或密码错误"
+            : err.detail;
+        setError(friendly);
       } else if (err instanceof Error) {
         setError(`登录失败: ${err.message}`);
       } else {

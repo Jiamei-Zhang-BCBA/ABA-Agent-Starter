@@ -420,6 +420,9 @@ def write_output_to_vault(
                         path, new_path,
                     )
                     path = new_path
+                    # ALSO rewrite wikilinks and inline references in the file content
+                    # so Obsidian links don't break. (BUG #11)
+                    file_content = file_content.replace(wrong, expected_prefix)
 
             try:
                 if is_append:
@@ -431,8 +434,26 @@ def write_output_to_vault(
             except Exception as e:
                 logger.error("Failed to write vault file %s: %s", path, e)
     else:
+        # Skills that legitimately operate without a client_code (no individual case)
+        _CLIENT_OPTIONAL_SKILLS = {
+            "privacy-filter",      # may run before any client exists
+            "staff-onboarding",
+            "staff-supervision",
+            "clinical-reflection",
+        }
+
+        if not client_code and skill_name not in _CLIENT_OPTIONAL_SKILLS:
+            # Refuse to write garbage paths like "Client--xxx.md" when no client is bound.
+            # Surface the problem to the caller via log so it doesn't silently land as delivered.
+            logger.warning(
+                "write_output_to_vault: skill=%s requires client_code but none provided; skipping write",
+                skill_name,
+            )
+            return
+
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-        c = f"Client-{client_code}"
+        # When a client is bound, build the prefix; otherwise leave a no-client tag.
+        c = f"Client-{client_code}" if client_code else "Client-未指定"
         path_map = {
             # 00-RawData
             "privacy-filter": f"00-RawData/脱敏存档/{c}-脱敏原始数据.md",

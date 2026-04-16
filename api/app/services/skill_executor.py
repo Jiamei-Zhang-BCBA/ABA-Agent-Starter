@@ -131,12 +131,20 @@ class SkillExecutor:
 
         # For directory references, list recent files
         if path.endswith("/"):
-            files = self.vault.list_directory(path)
-            if not files:
+            items = self.vault.list_directory(path)
+            if not items:
                 return None
+            # list_directory now returns list[dict]; pick file entries only
+            file_entries = [
+                it for it in items
+                if isinstance(it, dict) and it.get("type") == "file"
+            ]
+            # Stable sort by name then take the 5 most recent (lexicographic on date-prefixed names works well here)
+            file_entries.sort(key=lambda it: it.get("name", ""))
             parts = []
-            for f in sorted(files)[-5:]:
-                content = self.vault.read_file(path + f)
+            for entry in file_entries[-5:]:
+                rel_path = entry.get("path") or (path + entry.get("name", ""))
+                content = self.vault.read_file(rel_path)
                 if content:
                     parts.append(content)
             return "\n\n---\n\n".join(parts) if parts else None
@@ -350,6 +358,17 @@ class SkillExecutor:
 3. **临床观察内容（如发育史、行为描述、强化物）→ 以原始资料为准**
 
 即：**路径和代号 100% 跟随表单，内容 100% 跟随原始资料，冲突点在文末「备注」标注即可，不要改路径。**
+
+## ⚠️ 输出强制约束（覆盖 CLAUDE.md 中的"人工在环"规则）
+本次执行运行在云端无状态模式，**没有 chat 上下文可以等待用户二次确认**。即使技能 SKILL.md 或 CLAUDE.md 提到"先发预览给用户确认再写入"，在云端模式下你必须：
+
+1. **直接生成最终的、可落盘的文件内容**，使用 `<!-- FILE: 路径 -->` 标记
+2. **禁止输出**「让我先给你看预览/确认/请回复 y」这种对话式文案
+3. **禁止输出**纯解释性段落而不带任何 FILE marker
+4. 如果你认为产出存在敏感问题（如脱敏歧义），可以在文档末尾「⚠️ 临床备注」章节里标注，但**主要内容必须照常写入**
+5. 服务端会把你的 FILE marker 内容直接落盘并交付，无任何中间审核步骤（expert tier 的审核也只看你给的 marker 内容）
+
+**违反此约束的输出 = 整个 job 视为失败。**
 
 ## 注意
 - 不要讨论路径是否存在、环境配置等问题 — 服务端会自动创建目录
