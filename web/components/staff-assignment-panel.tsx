@@ -83,7 +83,7 @@ export function StaffAssignmentPanel({ clientId }: StaffAssignmentPanelProps) {
     setDialogOpen(true);
   }
 
-  function handleRelationChange(v: string) {
+  function handleRelationChange(v: string | null) {
     if (!v) return;
     setSelectedRelation(v);
     setSelectedUserId(""); // reset selection since the list will change
