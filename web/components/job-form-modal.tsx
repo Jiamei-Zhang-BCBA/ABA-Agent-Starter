@@ -143,7 +143,22 @@ export function JobFormModal({ feature, open, onClose, defaultClientId }: JobFor
             />
           </div>
         );
-      case "select_client":
+      case "select_client": {
+        // When opened from a client page, lock the client field
+        if (type === "select_client" && defaultClientId && formData[name]) {
+          const selectedOpt = (field.options || []).find((o) => o.value === formData[name]);
+          return (
+            <div key={name} className="space-y-2">
+              <Label>{label}</Label>
+              <div className="border rounded-md px-3 py-2 bg-gray-50 text-sm text-gray-700">
+                {selectedOpt?.label || formData[name]}
+              </div>
+            </div>
+          );
+        }
+        // Fall through to normal select
+      }
+      // eslint-disable-next-line no-fallthrough
       case "select_staff":
         return (
           <div key={name} className="space-y-2">
