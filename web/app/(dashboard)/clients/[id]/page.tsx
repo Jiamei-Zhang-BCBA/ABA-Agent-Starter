@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -11,9 +11,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StaffAssignmentPanel } from "@/components/staff-assignment-panel";
 import { VaultFileViewer } from "@/components/vault-file-viewer";
+import { JobFormModal } from "@/components/job-form-modal";
 import { getFeatureName } from "@/lib/feature-names";
 import { FolderOpen } from "lucide-react";
-import type { Client } from "@/types";
+import type { Client, Feature } from "@/types";
 
 function formatTime(iso: string) {
   return new Date(iso).toLocaleString("zh-CN", {
@@ -70,7 +71,6 @@ interface FeatureItem {
 
 export default function ClientDetailPage() {
   const params = useParams();
-  const router = useRouter();
   const { user } = useAuth();
   const clientId = params.id as string;
   const [data, setData] = useState<TimelineResponse | null>(null);
@@ -81,6 +81,10 @@ export default function ClientDetailPage() {
   // Features visible to this user (from API, includes all plan features)
   const [features, setFeatures] = useState<FeatureItem[]>([]);
   const [featuresLoaded, setFeaturesLoaded] = useState(false);
+
+  // Job form modal state
+  const [selectedFeature, setSelectedFeature] = useState<Feature | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
 
   // Load timeline and features in parallel, only show page when both done
   useEffect(() => {
@@ -157,11 +161,10 @@ export default function ClientDetailPage() {
               {features.map((feat) => (
                 <button
                   key={feat.id}
-                  onClick={() =>
-                    router.push(
-                      `/features?feature=${feat.id}&client_id=${clientId}`
-                    )
-                  }
+                  onClick={() => {
+                    setSelectedFeature(feat as unknown as Feature);
+                    setModalOpen(true);
+                  }}
                   className="flex items-start gap-3 p-4 rounded-lg border bg-white hover:bg-indigo-50 hover:border-indigo-200 transition text-left"
                 >
                   <div className="w-10 h-10 rounded-lg bg-indigo-100 flex items-center justify-center shrink-0 text-lg">
@@ -269,6 +272,17 @@ export default function ClientDetailPage() {
         path={viewerPath}
         open={viewerOpen}
         onOpenChange={setViewerOpen}
+      />
+
+      {/* Job Form Modal — opens in-page, no navigation */}
+      <JobFormModal
+        feature={selectedFeature}
+        open={modalOpen}
+        onClose={() => {
+          setModalOpen(false);
+          setSelectedFeature(null);
+        }}
+        defaultClientId={clientId}
       />
     </div>
   );
