@@ -103,8 +103,17 @@ sudo ln -sf /etc/nginx/sites-available/aba-api /etc/nginx/sites-enabled/aba-api
 sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t && sudo systemctl reload nginx
 
-# 7. 验证
-echo "[7/7] 验证部署..."
+# 7. 设置每日自动备份
+echo "[7/8] 设置每日备份..."
+chmod +x ~/ABA-Agent-Starter/scripts/backup.sh
+chmod +x ~/ABA-Agent-Starter/scripts/restore.sh
+mkdir -p /root/backups/aba
+# Add cron job if not already present
+(crontab -l 2>/dev/null | grep -v "backup.sh"; echo "0 2 * * * /root/ABA-Agent-Starter/scripts/backup.sh >> /var/log/aba-backup.log 2>&1") | crontab -
+echo "  每日凌晨2点自动备份，保留30天"
+
+# 8. 验证
+echo "[8/8] 验证部署..."
 sleep 3
 HEALTH=$(curl -s http://localhost:8000/health)
 echo ""

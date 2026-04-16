@@ -4,6 +4,8 @@ from pydantic import BaseModel
 class LoginRequest(BaseModel):
     email: str
     password: str
+    captcha_id: str | None = None
+    captcha_answer: str | None = None
 
 
 class TokenResponse(BaseModel):

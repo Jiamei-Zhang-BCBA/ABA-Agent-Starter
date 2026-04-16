@@ -1,8 +1,9 @@
-"""Auth endpoints: login, refresh, me."""
+"""Auth endpoints: login, refresh, me, captcha."""
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.database import get_db
 from app.schemas.auth import LoginRequest, TokenResponse, RefreshRequest, UserResponse
 from app.services.auth_service import (
@@ -12,6 +13,7 @@ from app.services.auth_service import (
     decode_token,
     get_current_user,
 )
+from app.services.captcha_service import generate_captcha, verify_captcha
 from app.models.user import User
 
 from app.middleware.rate_limiter import limiter
@@ -19,9 +21,29 @@ from app.middleware.rate_limiter import limiter
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
 
+@router.get("/captcha")
+async def get_captcha():
+    """Generate a math CAPTCHA for login."""
+    return generate_captcha()
+
+
 @router.post("/login", response_model=TokenResponse)
 @limiter.limit("5/minute")
 async def login(request: Request, req: LoginRequest, db: AsyncSession = Depends(get_db)):
+    # Verify CAPTCHA if enabled
+    settings = get_settings()
+    if settings.captcha_enabled:
+        if not req.captcha_id or not req.captcha_answer:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="请完成验证码",
+            )
+        if not verify_captcha(req.captcha_id, req.captcha_answer):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="验证码错误或已过期",
+            )
+
     user = await authenticate_user(db, req.email, req.password)
 
     from app.services.audit_service import log_action
