@@ -92,10 +92,25 @@ export interface UserUpdateRequest {
 export interface FormField {
   name: string;
   label: string;
-  type: "text" | "number" | "textarea" | "file" | "select_client" | "select_staff";
+  type:
+    | "text"
+    | "number"
+    | "textarea"
+    | "file"
+    | "select"
+    | "select_client"
+    | "select_staff";
   required: boolean;
   accept?: string[];
   options?: { value: string; label: string }[];
+  placeholder?: string;
+  help_text?: string;
+}
+
+export interface ExpectedOutput {
+  op: "create" | "edit" | "append";
+  path: string;
+  description: string;
 }
 
 export interface Feature {
@@ -106,6 +121,8 @@ export interface Feature {
   category: string;
   form_schema: { fields: FormField[] };
   output_template: string;
+  expected_outputs?: ExpectedOutput[];
+  is_destructive?: boolean;
 }
 
 export interface FeatureListResponse {

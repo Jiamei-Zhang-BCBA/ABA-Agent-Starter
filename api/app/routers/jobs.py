@@ -82,16 +82,23 @@ async def create_job(
             )
         await f.seek(0)  # Reset for later read
 
+    # Collect uploaded filenames for either-or validation rules
+    uploaded_filenames = [f.filename for f in files if f.filename]
+
     # Validate file extensions
-    if files:
+    if uploaded_filenames:
         try:
-            validate_file_extensions(feature_id, [f.filename for f in files if f.filename])
+            validate_file_extensions(feature_id, uploaded_filenames)
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
 
-    # Parse and validate form_data
+    # Parse and validate form_data (either-or rules need uploaded_filenames)
     try:
-        parsed_form = validate_form_data(feature_id, json.loads(form_data))
+        parsed_form = validate_form_data(
+            feature_id,
+            json.loads(form_data),
+            uploaded_filenames=uploaded_filenames,
+        )
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="Invalid form_data JSON")
     except ValueError as e:

@@ -15,11 +15,26 @@ NUMBER_RANGES: dict[str, tuple[float, float]] = {
 }
 
 
-def validate_form_data(feature_id: str, form_data: dict) -> dict:
+# Either-or constraints: at least one of the listed fields must be provided.
+# Format: feature_id -> list of (field_name_a, field_name_b, error_label)
+EITHER_OR_RULES: dict[str, list[tuple[str, str, str]]] = {
+    "session_review": [
+        ("session_text", "session_file", "课后记录文字 或 课后记录文件"),
+    ],
+    "staff_supervision": [
+        ("observation_text", "observation_file", "听课随笔 或 听课记录文件"),
+    ],
+}
+
+
+def validate_form_data(feature_id: str, form_data: dict, uploaded_filenames: list[str] | None = None) -> dict:
     """
     Validate form_data against the feature's form_schema.
     Returns sanitized dict with only known fields.
     Raises ValueError for validation failures.
+
+    `uploaded_filenames` is the list of file names attached to this submission;
+    used by either-or rules that pair a textarea with a file upload.
     """
     feature = get_feature(feature_id)
     if feature is None:
@@ -34,21 +49,29 @@ def validate_form_data(feature_id: str, form_data: dict) -> dict:
         if field.type == "file":
             continue
 
-        # Skip select fields (client_id/staff_id handled by router)
+        # select_client / select_staff are dynamic options handled by router
         if field.type in ("select_client", "select_staff"):
             if value:
                 validated[field.name] = str(value)
             continue
 
-        # Required check
+        # Required check (applies to text/textarea/number/select)
         if field.required and (value is None or str(value).strip() == ""):
             raise ValueError(f"必填字段缺失: {field.label}")
 
-        if value is None:
+        if value is None or str(value).strip() == "":
             continue
 
         # Type validation
         validated[field.name] = _validate_field_type(field, value)
+
+    # Either-or post-check
+    files = uploaded_filenames or []
+    for text_field, file_field, label in EITHER_OR_RULES.get(feature_id, []):
+        has_text = bool(validated.get(text_field, "").strip()) if isinstance(validated.get(text_field), str) else bool(validated.get(text_field))
+        has_file = bool(files)  # any uploaded file counts; finer-grained mapping not needed yet
+        if not has_text and not has_file:
+            raise ValueError(f"必须至少提供其一: {label}")
 
     return validated
 
@@ -104,6 +127,13 @@ def _validate_field_type(field: FormField, value) -> str | int | float:
             raise ValueError(f"{field.label} 超过 5000 字限制")
         if field.type == "text" and len(text) > 500:
             raise ValueError(f"{field.label} 超过 500 字限制")
+        return text
+
+    if field.type == "select":
+        text = str(value).strip()
+        valid_values = {opt.get("value") for opt in field.options}
+        if valid_values and text not in valid_values:
+            raise ValueError(f"{field.label} 取值无效（必须是: {', '.join(sorted(valid_values))}）")
         return text
 
     return str(value)

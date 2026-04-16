@@ -60,13 +60,14 @@ interface TimelineResponse {
   completed_jobs: number;
 }
 
-// Feature type from API
+// Feature type from API (subset; full type lives in @/types)
 interface FeatureItem {
   id: string;
   display_name: string;
   description: string;
   icon: string;
   category: string;
+  is_destructive?: boolean;
 }
 
 export default function ClientDetailPage() {
@@ -158,28 +159,48 @@ export default function ClientDetailPage() {
             <div className="text-center py-8 text-gray-400">暂无可用功能</div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {features.map((feat) => (
-                <button
-                  key={feat.id}
-                  onClick={() => {
-                    setSelectedFeature(feat as unknown as Feature);
-                    setModalOpen(true);
-                  }}
-                  className="flex items-start gap-3 p-4 rounded-lg border bg-white hover:bg-indigo-50 hover:border-indigo-200 transition text-left"
-                >
-                  <div className="w-10 h-10 rounded-lg bg-indigo-100 flex items-center justify-center shrink-0 text-lg">
-                    {feat.icon}
-                  </div>
-                  <div>
-                    <p className="font-medium text-sm text-gray-900">
-                      {feat.display_name}
-                    </p>
-                    <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">
-                      {feat.description}
-                    </p>
-                  </div>
-                </button>
-              ))}
+              {features.map((feat) => {
+                const danger = feat.is_destructive === true;
+                return (
+                  <button
+                    key={feat.id}
+                    onClick={() => {
+                      setSelectedFeature(feat as unknown as Feature);
+                      setModalOpen(true);
+                    }}
+                    className={
+                      "flex items-start gap-3 p-4 rounded-lg border transition text-left " +
+                      (danger
+                        ? "bg-white border-red-300 hover:bg-red-50 hover:border-red-400"
+                        : "bg-white hover:bg-indigo-50 hover:border-indigo-200")
+                    }
+                  >
+                    <div
+                      className={
+                        "w-10 h-10 rounded-lg flex items-center justify-center shrink-0 text-lg " +
+                        (danger ? "bg-red-100" : "bg-indigo-100")
+                      }
+                    >
+                      {feat.icon}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <p className="font-medium text-sm text-gray-900 truncate">
+                          {feat.display_name}
+                        </p>
+                        {danger && (
+                          <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-medium">
+                            ⚠️ 不可逆
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">
+                        {feat.description}
+                      </p>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           )}
         </TabsContent>

@@ -19,12 +19,18 @@ _client = TestClient(app)
 
 @patch("app.services.review_service.subprocess.run")
 def test_ai_revise_success(mock_run):
+    # Claude CLI returns usage tokens nested under `usage.input_tokens`
+    # (cache_read + cache_creation are summed in by review_service)
     mock_run.return_value = MagicMock(
         returncode=0,
         stdout=json.dumps({
             "result": "# 修改后文档\n\n修改后的段落。",
-            "input_tokens": 500,
-            "output_tokens": 200,
+            "usage": {
+                "input_tokens": 500,
+                "output_tokens": 200,
+                "cache_read_input_tokens": 0,
+                "cache_creation_input_tokens": 0,
+            },
         }),
         stderr="",
     )

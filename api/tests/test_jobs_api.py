@@ -31,14 +31,17 @@ def _auth_header(token: str) -> dict:
     return {"Authorization": f"Bearer {token}"}
 
 
-def _create_intake_job(token: str, *, child_alias: str = "小明", age: int = 5) -> dict:
+def _create_intake_job(token: str, *, child_alias: str = "小明", parent_note: str = "测试备注") -> dict:
     """Helper: create a job using the intake feature with valid form data and one file."""
     resp = _client.post(
         "/api/v1/jobs",
         headers=_auth_header(token),
         data={
             "feature_id": "intake",
-            "form_data": json.dumps({"child_alias": child_alias, "age": age}),
+            "form_data": json.dumps({
+                "child_alias": child_alias,
+                "parent_note": parent_note,
+            }),
         },
         files={"files": ("test.txt", io.BytesIO(b"test content"), "text/plain")},
     )
@@ -73,7 +76,7 @@ def test_create_job_missing_form_fields():
     reg = _register_org("缺字段测试", "missing_fields@jobs-test.com")
     token = reg["access_token"]
 
-    # Empty form_data: child_alias and age are required for intake
+    # Empty form_data: child_alias is required for intake
     resp = _client.post(
         "/api/v1/jobs",
         headers=_auth_header(token),
@@ -90,23 +93,23 @@ def test_create_job_missing_form_fields():
     assert "儿童昵称" in detail or "必填" in detail
 
 
-def test_create_job_missing_age_field():
-    reg = _register_org("缺年龄测试", "missing_age@jobs-test.com")
+def test_create_job_rejects_invalid_select_value():
+    """quick_summary.purpose is a select; passing an invalid option must 400."""
+    reg = _register_org("非法选项测试", "invalid_select@jobs-test.com")
     token = reg["access_token"]
 
     resp = _client.post(
         "/api/v1/jobs",
         headers=_auth_header(token),
         data={
-            "feature_id": "intake",
-            "form_data": json.dumps({"child_alias": "小红"}),  # age missing
+            "feature_id": "quick_summary",
+            "form_data": json.dumps({"purpose": "totally-fake-option"}),
         },
-        files={"files": ("test.txt", io.BytesIO(b"x"), "text/plain")},
     )
 
     assert resp.status_code == 400, f"Expected 400, got {resp.status_code}: {resp.text}"
     detail = resp.json()["detail"]
-    assert "年龄" in detail or "必填" in detail
+    assert "取值无效" in detail or "purpose" in detail.lower() or "用途" in detail
 
 
 # ---------------------------------------------------------------------------
@@ -183,7 +186,7 @@ def test_list_jobs_pagination():
 
     # Create 3 jobs
     for i in range(3):
-        resp = _create_intake_job(token, child_alias=f"儿童{i}", age=i + 3)
+        resp = _create_intake_job(token, child_alias=f"儿童{i}", parent_note=f"备注 {i}")
         assert resp.status_code == 201
 
     # Limit to 2
@@ -207,7 +210,7 @@ def test_get_job_detail():
     reg = _register_org("详情测试", "detail@jobs-test.com")
     token = reg["access_token"]
 
-    create_resp = _create_intake_job(token, child_alias="小刚", age=7)
+    create_resp = _create_intake_job(token, child_alias="小刚", parent_note="初访补充")
     assert create_resp.status_code == 201
     job_id = create_resp.json()["id"]
 
@@ -219,7 +222,7 @@ def test_get_job_detail():
     assert detail["feature_id"] == "intake"
     # form_data_json should contain what we submitted
     assert detail["form_data_json"].get("child_alias") == "小刚"
-    assert detail["form_data_json"].get("age") == 7
+    assert detail["form_data_json"].get("parent_note") == "初访补充"
 
 
 def test_get_job_detail_not_found():
