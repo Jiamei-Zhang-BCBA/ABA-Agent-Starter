@@ -2,20 +2,22 @@
 
 - **测试日期**：2026-04-17
 - **测试环境**：http://34.182.17.120/（生产 VM, GCP）
-- **部署 commit**：`ff66434`
-- **测试方法**：Chrome MCP 浏览器自动化 + fire-and-poll + REST API 直调
+- **初次测试 commit**：`ff66434` | **修复后验证 commit**：`8294675`
+- **测试方法**：Chrome MCP 浏览器自动化 + fire-and-poll + REST API 直调 + curl
 - **测试人**：Clinical Director Agent (Claude Opus 4.6)
 - **测试目标**：从 0 到 1 模拟虚拟儿童「A-小舟」从接案到达标的完整临床生命周期，验证 17 个 skill 的端到端串联业务流。
+
+> **最终结果**：修复 BUG #17 后 **13/13 全通过** 🎉
 
 ---
 
 ## 🎯 整体结论
 
-**系统已达到"临床可用"标准 — 除 1 个 expert tier 超时 bug 外，12/13 步骤全部通过。**
+**修复 BUG #17 后 13/13 全部通过 — 系统已达到"临床可用"标准。**
 
 | 维度 | 结果 |
 |---|---|
-| **技能端到端通过率** | 12/13 (92.3%) |
+| **技能端到端通过率** | **13/13 (100%)** ✅ （初轮 12/13，修复 BUG #17 后补跑 FBA 通过） |
 | **数据隐私（0 真实姓名泄漏）** | ✅ 100% |
 | **代号一致性（A-小舟 全档案）** | ✅ 136 处引用，0 冲突 |
 | **教师身份绑定（Teacher A）** | ✅ A-小舟 档案内 68 处一致，无 fallback |
@@ -43,7 +45,7 @@
 | 8 | session_review | auto | `1b6682b4` | 41067 / 12357 | 4 (日志+教师档案 append+核心 append+日志) | 日志 2580 | ✅ 课后记录归档 |
 | 9 | staff_supervision | auto | `6f3509a2` | 40408 / 9219 | 3 (教师 append+实操单 rewrite+日志) | 实操单→1561 | ✅ 督导反馈 |
 | 10 | reinforcer | auto | `9d01c550` | 32337 / 13544 | 3 (强化物档+核心 edit+日志) | 强化物 2727 | ✅ 饱和检测 |
-| 11 | **fba** | expert | `86876b85` | **0 / 0** | **0** | **-** | ❌ **BUG #17** |
+| 11 | **fba** | expert | `86876b85` → `defea015` | 33438 / 14595 | 3 (FBA 分析 + 核心档案 edit + 日志) | FBA **6056** (含 15×BIP) | ✅ **修复后重跑首次通过** |
 | 12 | parent_letter | auto | `23288dc2` | 41350 / 3615 | 3 (家书+核心 append+日志) | 家书 2051 | ✅ 真实进展引用 |
 | 13 | milestone_report | expert | `de3caf30` | 42059 / 16232 | 4 (报告+喜报+核心+日志) | 报告 3876 / 喜报 1043 | ✅ approved |
 
@@ -265,3 +267,25 @@ api/storage/tenants/25bb3101-.../vault/
 
 测试耗时：约 90 分钟（含 6 次 expert tier 5-6min 等待）
 最终成本：约 368k input tokens + 115k output tokens（单次完整生命周期）
+
+---
+
+## 🔧 BUG #17 修复后补测记录 (2026-04-17 下午)
+
+**修复 commit**: `8294675` - `fix: BUG #17 retry 后 job 永久 queued (再调度 worker thread)`
+
+### 修复核心
+`JobProcessor.process()` 的 retry 分支只写 `status=QUEUED` 就返回，local-worker 模式下无人再拉起 thread → job 永久卡死。修复方案是新增 `_reschedule_retry(job_id)` 方法，起 daemon thread 等 `RETRY_DELAY_SECONDS` 后再次调度。
+
+### 验证
+- 6 个新单元测试全通过 (`tests/test_job_retry_dispatch.py`)
+- 195 全量回归无破坏
+- A-小舟 重新提交 FBA job `defea015` 首次即通过（in=33438 / out=14595, 未触发 retry）
+- Approve 后 FBA 档案从 355 字骨架扩展为 **6056 字** 完整分析：
+  - ABC Event 引用 **7 处**
+  - 拍头功能分析 **18 处**
+  - **BIP 方案引用 15 处** — 行为干预方案完整
+  - 功能假设 **6 处**（逃避/获得两大类都已论证）
+
+### 最终修正结论
+> A-小舟 完整生命周期 13/13 全通过。核心档案、IEP、FBA、BIP、强化物动态、家书、里程碑报告**全部完备**。**系统已达 beta 可交付状态**。
