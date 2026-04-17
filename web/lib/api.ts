@@ -38,6 +38,14 @@ async function request<T>(
   });
 
   if (res.status === 401) {
+    // Auth endpoints (login, register) return 401 for bad credentials —
+    // these must NOT trigger logout/redirect; just throw so the page can show an error.
+    const isAuthEndpoint = path.startsWith("/auth/login") || path.startsWith("/auth/register");
+    if (isAuthEndpoint) {
+      const body = await res.json().catch(() => ({ detail: "请求失败" }));
+      throw new ApiError(401, body.detail || "请求失败");
+    }
+
     // Try to refresh the token before giving up
     const { refreshToken, setAuth } = useAuth.getState();
     if (refreshToken) {
