@@ -70,8 +70,42 @@ class JobProcessor:
                 job.error_message = f"Retry {retry_count + 1}/{MAX_RETRIES}: {str(exc)[:500]}"
                 db.commit()
                 logger.info("Job %s queued for retry %d/%d", job_id, retry_count + 1, MAX_RETRIES)
+
+                # BUG #17 fix: actually re-dispatch the job. Without this, the QUEUED status
+                # just sits forever because nothing else polls the queue in local-worker mode.
+                # We delay by RETRY_DELAY_SECONDS to avoid tight retry loops.
+                self._reschedule_retry(job_id)
             else:
                 self._mark_failed(db, job, str(exc))
+
+    def _reschedule_retry(self, job_id: str) -> None:
+        """Re-dispatch a job for retry. In local-worker mode, spawn a new daemon
+        thread after RETRY_DELAY_SECONDS. In Celery mode, enqueue on the broker.
+
+        Without this, BUG #17: jobs set to QUEUED during retry never run again
+        because local_worker only starts a thread once at POST /jobs time.
+        """
+        import time
+
+        def _delayed_dispatch():
+            if RETRY_DELAY_SECONDS > 0:
+                time.sleep(RETRY_DELAY_SECONDS)
+            try:
+                # Prefer Celery if a real broker is configured
+                if settings.redis_url and settings.redis_url != "redis://localhost:6379/0":
+                    from app.workers.celery_app import process_job_task  # type: ignore
+                    process_job_task.delay(job_id)
+                    logger.info("Job %s retry dispatched via Celery", job_id)
+                else:
+                    from app.services.local_worker import process_job_background
+                    process_job_background(job_id)
+                    logger.info("Job %s retry dispatched via local worker", job_id)
+            except Exception:
+                logger.exception("Failed to reschedule retry for job %s", job_id)
+
+        # Fire-and-forget daemon thread so we don't block the current worker thread
+        t = threading.Thread(target=_delayed_dispatch, name=f"retry-{job_id[:8]}", daemon=True)
+        t.start()
 
     def _execute(self, db: Session, job: Job) -> None:
         """Core execution logic with timeout."""
