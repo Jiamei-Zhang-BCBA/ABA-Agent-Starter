@@ -304,3 +304,66 @@ async def _check_client_access(db: AsyncSession, user: User, client_id: str) -> 
         link_result = await db.execute(link_stmt)
         if link_result.scalar_one_or_none() is None:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No access to this client")
+
+
+# ---------------------------------------------------------------------------
+# Super-admin operations — cleanup of stuck/zombie jobs
+# Created for BUG #17 aftermath: jobs can end up in persistent "queued" state
+# when the retry mechanism (now fixed in commit 8294675) failed in the past.
+# ---------------------------------------------------------------------------
+
+
+@router.post("/{job_id}/admin-cancel")
+async def admin_cancel_job(
+    job_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Super-admin-only: mark a stuck job as FAILED. Used to clean up zombie
+    jobs that never ran (e.g., from BUG #17 before the retry fix).
+
+    Authorization:
+      - Requires user.email to be in SUPER_ADMIN_EMAILS (same gate as /admin/*).
+      - Cross-tenant by design — super-admin operates globally.
+
+    Safety:
+      - Only jobs in status QUEUED, PARSING, or PROCESSING are cancellable.
+      - Terminal states (delivered/approved/failed/rejected) are rejected to
+        prevent accidental destruction of real results.
+    """
+    # Import at function level to avoid circular imports
+    from app.services.auth_service import require_super_admin
+    await require_super_admin(user)
+
+    stmt = select(Job).where(Job.id == job_id)
+    result = await db.execute(stmt)
+    job = result.scalar_one_or_none()
+    if job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+
+    cancellable = {
+        JobStatus.QUEUED.value,
+        JobStatus.PARSING.value,
+        JobStatus.PROCESSING.value,
+    }
+    if job.status not in cancellable:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Job already in terminal state ({job.status}); cannot cancel",
+        )
+
+    previous_status = job.status
+    job.status = JobStatus.FAILED.value
+    job.error_message = f"Admin-cancelled (was {previous_status}) by {user.email}"[:2000]
+
+    from datetime import datetime, timezone
+    job.completed_at = datetime.now(timezone.utc)
+
+    await db.commit()
+
+    return {
+        "job_id": job.id,
+        "previous_status": previous_status,
+        "new_status": job.status,
+        "cancelled_by": user.email,
+    }
