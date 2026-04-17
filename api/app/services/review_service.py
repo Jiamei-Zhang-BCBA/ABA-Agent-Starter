@@ -288,14 +288,20 @@ def ai_revise_content(content: str, instruction: str, vault_path: str | None = N
         with open(prompt_path, "r", encoding="utf-8") as f:
             prompt_text = f.read()
 
-        proc = subprocess.run(
-            cmd,
-            input=prompt_text,
-            capture_output=True,
-            text=True,
-            timeout=120,
-            encoding="utf-8",
-        )
+        # BUG #16: 以前硬编码 120s，大文档（10k+ 字）改写会 TimeoutExpired 未捕获 → 500 ISE。
+        # 现在跟随 settings.job_timeout_seconds（默认 600s），并捕获超时异常为友好错误。
+        try:
+            proc = subprocess.run(
+                cmd,
+                input=prompt_text,
+                capture_output=True,
+                text=True,
+                timeout=int(getattr(settings, "job_timeout_seconds", 600)),
+                encoding="utf-8",
+            )
+        except subprocess.TimeoutExpired as e:
+            logger.error("[AI Revise] claude CLI timeout after %ss (content=%d chars)", e.timeout, len(content))
+            raise RuntimeError(f"AI 改写超时（>{e.timeout}s）。文档过长或 Claude 响应慢，请缩短内容或稍后重试。")
 
         if proc.returncode != 0:
             error_msg = proc.stderr.strip() or proc.stdout.strip() or "Unknown CLI error"
