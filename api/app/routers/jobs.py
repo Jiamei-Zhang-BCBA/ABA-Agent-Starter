@@ -117,10 +117,15 @@ async def create_job(
         if (staff_obj := s_result.scalar_one_or_none()):
             parsed_form["staff_name"] = staff_obj.name
 
-    # Validate client access for teacher/parent roles
+    # Validate client access for teacher/parent roles.
+    # BUG #18 fix: API callers (curl/automation) often put client_id only in form_data
+    # JSON. When top-level Form field is empty, fall back to form_data.client_id so
+    # Job.client_id gets persisted correctly — otherwise review_service skips vault
+    # write silently because client_code cannot be resolved.
     parsed_client_id = None
-    if client_id:
-        parsed_client_id = client_id
+    resolved_client_id = client_id or parsed_form.get("client_id")
+    if resolved_client_id:
+        parsed_client_id = resolved_client_id
         await _check_client_access(db, user, parsed_client_id)
 
     # Create job record

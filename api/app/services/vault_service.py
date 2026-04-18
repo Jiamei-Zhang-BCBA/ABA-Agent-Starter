@@ -350,6 +350,105 @@ def init_client_vault(vault: "LocalVaultService | VaultService", code: str) -> N
 
 
 # ---------------------------------------------------------------------------
+# Markdown section replacement helper (BUG #19)
+# ---------------------------------------------------------------------------
+
+def _normalize_section_key(raw: str) -> str:
+    """
+    Normalize a section identifier for fuzzy matching.
+    Strips emoji, punctuation, whitespace; keeps Chinese/English/digit characters.
+    Mirrors the rule from skills/_config.md:
+      'matching ignores emoji and surrounding whitespace, compares Chinese keyword only.'
+    """
+    import re as _re
+    # Keep CJK, latin letters, digits; drop everything else (emoji/symbols/spaces).
+    cleaned = _re.sub(
+        r"[^0-9A-Za-z\u4e00-\u9fff]+", "", raw or "",
+    )
+    return cleaned.lower()
+
+
+def _replace_markdown_section(
+    doc: str, section_name: str, new_body: str,
+) -> str:
+    """
+    Replace the contents of a markdown section whose heading (any level ##/###/####)
+    matches `section_name` (emoji-insensitive). Keeps the original heading line,
+    swaps the body up to the next heading of same-or-higher level.
+
+    If `new_body` itself starts with a heading that normalizes to the same key,
+    that heading is dropped (we reuse the original) to avoid duplicated titles.
+
+    If no matching section is found, the new content is appended at the end of the
+    document under a fresh `## {section_name}` heading — never dropped.
+    """
+    import re as _re
+
+    target = _normalize_section_key(section_name)
+    if not target:
+        # Degenerate: no meaningful keyword; fall back to appending at EOF.
+        return doc.rstrip() + "\n\n" + new_body.strip() + "\n"
+
+    lines = doc.splitlines()
+    heading_re = _re.compile(r"^(#{2,6})\s+(.+?)\s*$")
+
+    # Find the matching heading line
+    start_idx = -1
+    start_level = 0
+    for idx, line in enumerate(lines):
+        m = heading_re.match(line)
+        if not m:
+            continue
+        level = len(m.group(1))
+        if _normalize_section_key(m.group(2)) == target:
+            start_idx = idx
+            start_level = level
+            break
+
+    # Strip a leading duplicate heading from new_body. AI frequently echoes the
+    # section title followed by extra annotations like "（基于 2026-04-22 FBA 更新）".
+    # We treat it as duplicate if the normalized heading contains the target key
+    # OR the target key contains the heading (prefix match in either direction).
+    body = new_body.strip()
+    body_lines = body.splitlines()
+    if body_lines:
+        m0 = heading_re.match(body_lines[0])
+        if m0:
+            heading_key = _normalize_section_key(m0.group(2))
+            if heading_key and (target in heading_key or heading_key in target):
+                body = "\n".join(body_lines[1:]).lstrip("\n")
+
+    if start_idx == -1:
+        # Section not found — append a fresh one so data is never lost.
+        sep = "" if doc.endswith("\n\n") else ("\n" if doc.endswith("\n") else "\n\n")
+        return (
+            doc.rstrip()
+            + "\n\n## "
+            + section_name.strip()
+            + "\n\n"
+            + body.strip()
+            + "\n"
+        )
+
+    # Find the end: next heading with level <= start_level
+    end_idx = len(lines)
+    for idx in range(start_idx + 1, len(lines)):
+        m = heading_re.match(lines[idx])
+        if m and len(m.group(1)) <= start_level:
+            end_idx = idx
+            break
+
+    new_lines = (
+        lines[: start_idx + 1]
+        + [""]
+        + body.splitlines()
+        + [""]
+        + lines[end_idx:]
+    )
+    return "\n".join(new_lines)
+
+
+# ---------------------------------------------------------------------------
 # Write skill output to vault
 # ---------------------------------------------------------------------------
 
@@ -367,16 +466,36 @@ def write_output_to_vault(
     import re
     from datetime import datetime, timezone
 
-    # Check if output contains multi-file markers
+    # Check if output contains multi-file markers.
+    # BUG #19 fix: support APPEND / EDIT:section / MERGE operation modifiers.
+    # Without this, `| EDIT:🚨 历史问题行为备忘` was captured into the path group
+    # as a literal string, producing garbage files like
+    # "Client-A-小航-核心档案.md | EDIT:🚨 历史问题行为备忘".
     file_markers = list(re.finditer(
-        r'<!--\s*FILE:\s*(.+?)(?:\s*\|\s*(APPEND))?\s*-->', content
+        r'<!--\s*FILE:\s*([^|>]+?)\s*(?:\|\s*(APPEND|EDIT:[^>]+?|MERGE)\s*)?-->',
+        content,
     ))
 
     if file_markers:
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         for i, marker in enumerate(file_markers):
             path = marker.group(1).strip()
-            is_append = marker.group(2) is not None
+            op_raw = (marker.group(2) or "").strip()
+            # Normalize op into (op_name, op_arg)
+            if op_raw.upper() == "APPEND":
+                op_name, op_arg = "APPEND", None
+            elif op_raw.upper().startswith("EDIT:"):
+                op_name = "EDIT"
+                op_arg = op_raw[len("EDIT:"):].strip()
+            elif op_raw.upper() == "MERGE":
+                # Short-term: treat MERGE as APPEND to avoid data loss. A proper
+                # semantic merge needs section-aware parsing; defer to a later fix.
+                op_name, op_arg = "APPEND", None
+            else:
+                op_name, op_arg = "WRITE", None
+            is_append = op_name == "APPEND"
+            is_edit = op_name == "EDIT"
+            edit_section = op_arg
             start = marker.end()
             end = file_markers[i + 1].start() if i + 1 < len(file_markers) else len(content)
             file_content = content[start:end].strip()
@@ -428,9 +547,33 @@ def write_output_to_vault(
                 if is_append:
                     existing = vault.read_file(path) or ""
                     vault.write_file(path, existing + "\n" + file_content)
+                elif is_edit and edit_section:
+                    # Replace a single section in an existing markdown file.
+                    # Section matching rules (per skills/_config.md):
+                    #   - ignore leading emoji and surrounding whitespace
+                    #   - match on the core Chinese/English keyword substring
+                    existing = vault.read_file(path) or ""
+                    if not existing:
+                        # No file yet — degrade gracefully by writing the new
+                        # content as a fresh file rather than dropping data.
+                        vault.write_file(path, file_content)
+                        logger.info(
+                            "EDIT target missing, wrote as new file: %s", path,
+                        )
+                    else:
+                        new_doc = _replace_markdown_section(
+                            existing, edit_section, file_content,
+                        )
+                        vault.write_file(path, new_doc)
+                        logger.info(
+                            "Edited section '%s' in vault file: %s",
+                            edit_section, path,
+                        )
                 else:
                     vault.write_file(path, file_content)
-                logger.info("Wrote vault file: %s (append=%s)", path, is_append)
+                logger.info(
+                    "Wrote vault file: %s (op=%s)", path, op_name,
+                )
             except Exception as e:
                 logger.error("Failed to write vault file %s: %s", path, e)
     else:
