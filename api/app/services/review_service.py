@@ -25,6 +25,33 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
+def _normalize_client_code(alias: str | None) -> str:
+    """
+    Return an idempotent ``A-<alias>`` client code.
+
+    Accepts the user-facing alias in any of these forms and produces a single
+    canonical output:
+
+    * ``""`` / ``None``              → ``""``
+    * ``"小磊"`` (bare alias)        → ``"A-小磊"``
+    * ``"A-小磊"`` (already prefixed) → ``"A-小磊"``
+    * ``"a-小磊"`` (lowercase prefix) → ``"A-小磊"``
+
+    This guards against BUG #20 where the naive ``f"A-{alias}"`` produced
+    ``"A-A-小磊"`` folders when users submitted the fully-qualified code as
+    ``child_alias``.
+    """
+    if not alias:
+        return ""
+    alias = alias.strip()
+    if not alias:
+        return ""
+    # Already prefixed (case-insensitive) — normalize the prefix to upper-case
+    if len(alias) >= 2 and alias[:2].lower() == "a-":
+        return "A-" + alias[2:]
+    return f"A-{alias}"
+
+
 async def create_review(db: AsyncSession, job: Job, output_content: str) -> Review:
     """Create a pending review for an expert-tier job."""
     review = Review(
@@ -98,8 +125,11 @@ async def approve_review(
     # Auto-create Client record for intake jobs
     if job.feature_id == "intake" and job.form_data_json:
         alias = job.form_data_json.get("child_alias", "")
-        if alias:
-            code_name = f"A-{alias}"
+        code_name = _normalize_client_code(alias)
+        if code_name:
+            # display_alias preserves the bare form (strip any leading "A-"
+            # so the UI shows 小磊 not A-小磊)
+            display_alias = code_name[2:] if code_name.startswith("A-") else code_name
             # Check if client already exists
             existing = await db.execute(
                 select(Client).where(
@@ -111,7 +141,7 @@ async def approve_review(
                 client = Client(
                     tenant_id=job.tenant_id,
                     code_name=code_name,
-                    display_alias=alias,
+                    display_alias=display_alias,
                     status=ClientStatus.ACTIVE.value,
                 )
                 db.add(client)
@@ -135,11 +165,12 @@ async def approve_review(
         feature = get_feature(job.feature_id)
         if feature:
             # Determine client_code: prefer form_data (always available), fallback to DB
+            # BUG #20 fix: use idempotent normalization so "A-小磊" / "小磊" / "a-小磊"
+            # all resolve to the same canonical code; prevents Client-A-A-小磊/ folders.
             client_code = ""
             if job.form_data_json:
                 alias = job.form_data_json.get("child_alias", "")
-                if alias:
-                    client_code = f"A-{alias}"
+                client_code = _normalize_client_code(alias)
             if not client_code and job.client_id:
                 client_result = await db.execute(
                     select(Client).where(Client.id == job.client_id)
