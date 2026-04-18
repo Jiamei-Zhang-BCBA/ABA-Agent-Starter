@@ -245,3 +245,80 @@ def test_bug19_edit_when_target_file_missing_writes_new_file(vault):
     result = vault.read_file(path)
     assert result is not None
     assert "目标内容" in result
+
+
+# ---------------------------------------------------------------------------
+# BUG #21 — SECTION_REPLACE / REPLACE_SECTION / APPEND_SECTION synonyms
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "modifier",
+    [
+        "SECTION_REPLACE:🚨 历史问题行为备忘",
+        "REPLACE_SECTION:🚨 历史问题行为备忘",
+    ],
+)
+def test_bug21_section_replace_synonyms_canonicalize_to_edit(vault, modifier):
+    """
+    BUG #21: AI skill prompts sometimes emit SECTION_REPLACE or REPLACE_SECTION
+    as synonyms for EDIT. The regex previously only recognized EDIT/APPEND/MERGE,
+    so the modifier leaked into the path group — producing a garbage file path
+    and silently dropping the intended section replacement.
+
+    Both synonyms must now behave identically to `EDIT:<section>`.
+    """
+    code = "A-test-bug21-replace"
+    path = _seed_core_file(vault, code)
+
+    ai_output = (
+        f"<!-- FILE: {path} | {modifier} -->\n"
+        "### 行为 1：扑咬 🔴 高优先级\n"
+        "- 功能：逃避 + 社会正强化\n"
+        "- BIP：两级协议\n"
+    )
+
+    write_output_to_vault(vault, "fba-analyzer", code, ai_output)
+
+    # Section must actually be replaced (old placeholder gone, new content in place)
+    updated = vault.read_file(path)
+    assert updated is not None, "core file must still exist after SECTION_REPLACE"
+    assert "## 🚨 历史问题行为备忘" in updated
+    assert "扑咬 🔴 高优先级" in updated
+    assert "两级协议" in updated
+    assert "⏳ 等待 fba-analyzer 执行" not in updated
+    # Sibling sections intact
+    assert "## 👤 基本信息" in updated
+    assert "## 🔗 全生命周期索引" in updated
+
+    # Regression guard: the modifier must NOT have leaked into a garbage path
+    garbage_path = f"{path} | {modifier}"
+    assert vault.read_file(garbage_path) is None, (
+        f"BUG #21 regression: '{modifier}' was written as a literal path file"
+    )
+
+
+def test_bug21_append_section_degrades_to_append(vault):
+    """
+    `APPEND_SECTION:<name>` is a prompt-level synonym for plain APPEND (targeted
+    section-append isn't implemented yet). It must at minimum preserve existing
+    content and add the new body instead of leaking into the path group.
+    """
+    code = "A-test-bug21-append"
+    path = "04-Supervision/系统变更日志.md"
+    vault.write_file(path, "# 系统变更日志\n\n[2026-01-01] init\n")
+
+    ai_output = (
+        f"<!-- FILE: {path} | APPEND_SECTION:## 2026-04 -->\n"
+        "[2026-04-22] fba-analyzer 执行\n"
+    )
+
+    write_output_to_vault(vault, "fba-analyzer", code, ai_output)
+
+    result = vault.read_file(path)
+    assert "[2026-01-01] init" in result
+    assert "[2026-04-22] fba-analyzer 执行" in result
+
+    # No garbage file with the modifier in the path
+    garbage = f"{path} | APPEND_SECTION:## 2026-04"
+    assert vault.read_file(garbage) is None

@@ -468,11 +468,20 @@ def write_output_to_vault(
 
     # Check if output contains multi-file markers.
     # BUG #19 fix: support APPEND / EDIT:section / MERGE operation modifiers.
-    # Without this, `| EDIT:🚨 历史问题行为备忘` was captured into the path group
-    # as a literal string, producing garbage files like
-    # "Client-A-小航-核心档案.md | EDIT:🚨 历史问题行为备忘".
+    # BUG #21 fix: also accept SECTION_REPLACE:<section> and REPLACE_SECTION:<section>
+    # / APPEND_SECTION:<section> synonyms produced by skill prompts. They are all
+    # canonicalized onto the EDIT branch (section-aware replace) or APPEND branch
+    # so the regex group captures correctly instead of leaking the modifier into
+    # the path group.
     file_markers = list(re.finditer(
-        r'<!--\s*FILE:\s*([^|>]+?)\s*(?:\|\s*(APPEND|EDIT:[^>]+?|MERGE)\s*)?-->',
+        r'<!--\s*FILE:\s*([^|>]+?)\s*'
+        r'(?:\|\s*('
+        r'APPEND(?:_SECTION:[^>]+?)?'  # APPEND  |  APPEND_SECTION:<name>
+        r'|EDIT:[^>]+?'
+        r'|SECTION_REPLACE:[^>]+?'
+        r'|REPLACE_SECTION:[^>]+?'
+        r'|MERGE'
+        r')\s*)?-->',
         content,
     ))
 
@@ -481,13 +490,27 @@ def write_output_to_vault(
         for i, marker in enumerate(file_markers):
             path = marker.group(1).strip()
             op_raw = (marker.group(2) or "").strip()
-            # Normalize op into (op_name, op_arg)
-            if op_raw.upper() == "APPEND":
+            op_upper = op_raw.upper()
+            # Normalize op into (op_name, op_arg).
+            # Accept synonyms so skill prompts can use EDIT / SECTION_REPLACE /
+            # REPLACE_SECTION interchangeably without leaking into the path group.
+            if op_upper == "APPEND":
                 op_name, op_arg = "APPEND", None
-            elif op_raw.upper().startswith("EDIT:"):
+            elif op_upper.startswith("APPEND_SECTION:"):
+                # APPEND_SECTION:<name> — append under a specific section; treat as
+                # plain APPEND for now (section-targeted append needs a dedicated
+                # handler; defer to a later fix).
+                op_name, op_arg = "APPEND", None
+            elif op_upper.startswith("EDIT:"):
                 op_name = "EDIT"
                 op_arg = op_raw[len("EDIT:"):].strip()
-            elif op_raw.upper() == "MERGE":
+            elif op_upper.startswith("SECTION_REPLACE:"):
+                op_name = "EDIT"
+                op_arg = op_raw[len("SECTION_REPLACE:"):].strip()
+            elif op_upper.startswith("REPLACE_SECTION:"):
+                op_name = "EDIT"
+                op_arg = op_raw[len("REPLACE_SECTION:"):].strip()
+            elif op_upper == "MERGE":
                 # Short-term: treat MERGE as APPEND to avoid data loss. A proper
                 # semantic merge needs section-aware parsing; defer to a later fix.
                 op_name, op_arg = "APPEND", None
