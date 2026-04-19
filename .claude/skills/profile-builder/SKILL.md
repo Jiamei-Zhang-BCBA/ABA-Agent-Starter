@@ -12,6 +12,26 @@ description: 当我需要基于初访信息深度构建/完善核心档案（Mas
 4. **变更日志**：操作完成后，追加至 `04-Supervision/系统变更日志.md`：
    `[{{当前日期时间}}] profile-builder → Write/Update 核心档案.md + 预留占位文件`
 
+# 🚫 文件命名禁令（OBS-16 硬规则）
+
+本 skill 只负责**填充已存在的骨架文件**（由 `init_client_vault` 在 client 创建时预埋）。**允许**操作的文件名只有以下 5 个：
+
+- ✅ `Client-[代号]-核心档案.md`（主要职责：填骨架）
+- ✅ `Client-[代号]-能力评估.md`（初始化骨架占位，等 assessment-logger 填充）
+- ✅ `Client-[代号]-FBA分析.md`（骨架占位，等 fba-analyzer 填充）
+- ✅ `Client-[代号]-IEP.md`（骨架占位，等 plan_generator 填充）
+- ✅ `Client-[代号]-强化物评估.md`（骨架占位，等 reinforcer-tracker 填充）
+
+**严禁**创建带工具名或专项名的评估文件：
+- ❌ `Client-[代号]-VB-MAPP评估.md`（v3 A-小磊测试 OBS-16 命中过）
+- ❌ `Client-[代号]-ABLLS-R评估.md`
+- ❌ `Client-[代号]-PEP-3评估.md`
+- ❌ `Client-[代号]-Wechsler智力测试.md`
+
+**原因**：downstream skill（plan-generator / milestone-report）只按标准名 `-能力评估.md` 查找，读不到工具专用文件；会造成"两个文件各有一半评估内容"的数据割裂。
+
+**工具专用评估的正确写法**：作为 frontmatter + 章节标题写入 `-能力评估.md` 中，或用日期版命名（如 `-能力评估-VB-MAPP-2026-04-20.md`）归档。
+
 # 输入要求
 明确指定的儿童代号（如 Client-A-兜兜）。Claude 需自动定位并读取 `01-Clients/Client-[代号]/Client-[代号]-初访信息表.md`。
 

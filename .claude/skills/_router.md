@@ -90,3 +90,49 @@ A. staff-onboarding (新老师入职建档树)
        ↓
 11. transfer-protocol (转衔移交)
 ```
+
+## 📋 推荐执行链（手动触发顺序建议）
+
+### 新个案标准链（通常跨 2-3 周）
+1. **privacy_filter**（脱敏）— 随到随跑
+2. **intake**（建骨架）— 脱敏后立即
+3. **profile_builder**（填档案）— intake approved 后
+4. **assessment**（能力基线）— ⏰ 需留出 **2-3 周正式施测窗口**
+5. **fba**（如有问题行为）— ⏰ 至少 **2 周 ABC 记录**后（OBS-05 门槛）
+6. **plan_generator**（IEP/BIP）— assessment + fba 都有数据后
+7. **program_slicer**（为每个 Teacher 拆实操单）
+
+### 每周维护链
+1. **session_review**（每节课后）
+2. **reinforcer_tracker**（每 2 周 — 需 ≥ 3 节课数据）
+3. **parent_letter**（每周家书）
+4. **clinical_reflection**（每周末）
+
+### 阶段评估链（每月 / 每季）
+1. 数据收集（session_review × N）
+2. **milestone_report**（阶段总结）
+3. **plan_generator**（IEP 修订，若需要）
+
+### 转衔链（结业 / 转校）
+1. 确认最近 1 次 **milestone_report** 已完成
+2. 最终 **staff_supervision** 总结（给接手教师的交棒）
+3. **transfer_protocol**（⚠️ 不可逆 — 前置数据门槛见 SKILL.md）
+
+## ⛔ Skill 前置条件表（数据门槛）
+
+| Skill | 前置条件 | 不满足时应给建议 |
+|:---|:---|:---|
+| `intake-interview` | 脱敏存档已存在 | 先跑 `privacy-filter` |
+| `profile-builder` | 初访信息表 > 500 字 | 先跑 `intake-interview` |
+| `assessment-logger` | 有上传评估数据（文件或口述）| 补充数据源 |
+| `fba-analyzer` | ≥ 10 个 ABC event 或 ≥ 2 周日志 | 先积累 `session-reviewer` 输出 |
+| `plan-generator` | 能力评估 + (若有问题行为) FBA 都非骨架 | 先跑前置 skill |
+| `program_slicer` | IEP 已定稿（> 3000 字）| 先跑 `plan-generator` |
+| `reinforcer-tracker` | ≥ 3 节课观察数据（OBS-05 延伸）| 先积累 `session-reviewer` 输出 |
+| `milestone-report` | 能力评估 + 近 2 周日志 ≥ 3 篇 | 先跑前置 skill |
+| `transfer-protocol` | **课后日志 ≥ 8 + 里程碑 ≥ 1 + 周期 ≥ 30 天**（OBS-04 门槛）| 补齐数据 **或** 在 transfer_reason 标"紧急"越过 |
+
+**触发规则**：当用户直接请求某个需前置条件的 skill 但前置缺失时，Claude 应：
+1. 明确指出缺失的前置
+2. 建议先执行对应的前置 skill
+3. 除非用户明确声明"跳过前置要求"（含"紧急"/"强制"/"我知道数据不足"等关键字），否则不执行
