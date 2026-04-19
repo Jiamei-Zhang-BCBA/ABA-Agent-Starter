@@ -230,12 +230,23 @@ class SkillExecutor:
             with open(prompt_path, "r", encoding="utf-8") as f:
                 prompt_text = f.read()
 
+            # BUG #26 fix (v5 2026-04-19): per-feature timeout override for long-form expert skills.
+            # Must match FEATURE_TIMEOUT_OVERRIDE_SECONDS in job_processor.py.
+            _cli_timeout_override = {
+                "plan-generator": 1200,
+                "transfer-protocol": 1200,
+                "milestone-report": 1200,
+            }
+            _cli_timeout = _cli_timeout_override.get(
+                feature._skill_name,
+                int(getattr(settings, "job_timeout_seconds", 600)),
+            )
             proc = subprocess.run(
                 cmd,
                 input=prompt_text,
                 capture_output=True,
                 text=True,
-                timeout=int(getattr(settings, "job_timeout_seconds", 600)),
+                timeout=_cli_timeout,
                 encoding="utf-8",
             )
 

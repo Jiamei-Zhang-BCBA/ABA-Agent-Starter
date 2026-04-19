@@ -31,6 +31,16 @@ JOB_TIMEOUT_SECONDS = int(getattr(settings, "job_timeout_seconds", 300))
 MAX_RETRIES = int(getattr(settings, "job_max_retries", 2))
 RETRY_DELAY_SECONDS = int(getattr(settings, "job_retry_delay_seconds", 30))
 
+# BUG #26 (v5 2026-04-19): per-feature timeout override for long-form expert skills.
+# plan_generator produces the largest structured output (IEP + BIP + schedules combined);
+# after commit 627def1 加了 S-xx 硬规则，opus 模型在 expert tier 稳定超 600s。
+# 这些 skill 的 timeout 放宽到 1200s（仍有 MAX_RETRIES 兜底）。
+FEATURE_TIMEOUT_OVERRIDE_SECONDS = {
+    "plan_generator": 1200,
+    "transfer_protocol": 1200,
+    "milestone_report": 1200,
+}
+
 
 class JobTimeoutError(Exception):
     """Raised when a job exceeds its time limit."""
@@ -177,7 +187,15 @@ class JobProcessor:
             pass  # Redis unavailable, SSE clients will fallback to polling
 
     def _execute_with_timeout(self, executor, feature, form_data, parsed_uploads, client_code):
-        """Execute skill with a timeout. Uses threading for cross-platform support."""
+        """Execute skill with a timeout. Uses threading for cross-platform support.
+
+        BUG #26 fix: use per-feature timeout override for long-form expert skills
+        (plan_generator / transfer_protocol / milestone_report). Falls back to
+        JOB_TIMEOUT_SECONDS for all other features.
+        """
+        feature_id = getattr(feature, "id", None) or getattr(feature, "_skill_name", None)
+        timeout_seconds = FEATURE_TIMEOUT_OVERRIDE_SECONDS.get(feature_id, JOB_TIMEOUT_SECONDS)
+
         result_holder = [None]
         error_holder = [None]
 
@@ -194,10 +212,10 @@ class JobProcessor:
 
         thread = threading.Thread(target=_run, daemon=True)
         thread.start()
-        thread.join(timeout=JOB_TIMEOUT_SECONDS)
+        thread.join(timeout=timeout_seconds)
 
         if thread.is_alive():
-            raise JobTimeoutError(f"Job exceeded {JOB_TIMEOUT_SECONDS}s timeout")
+            raise JobTimeoutError(f"Job exceeded {timeout_seconds}s timeout")
 
         if error_holder[0]:
             raise error_holder[0]
