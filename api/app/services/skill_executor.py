@@ -40,12 +40,14 @@ settings = get_settings()
 MODEL_MAP = {
     "haiku": "claude-haiku-4-5-20251001",
     "sonnet": "claude-sonnet-4-6",
+    "opus": "claude-opus-4-7",
 }
 
 # Model mapping for CLI mode (claude --model flag)
 CLI_MODEL_MAP = {
     "haiku": "haiku",
     "sonnet": "sonnet",
+    "opus": "claude-opus-4-7",  # Max subscription CLI resolves this alias internally
 }
 
 
@@ -195,7 +197,9 @@ class SkillExecutor:
         Strategy: combine system_prompt + user_message into a single prompt
         piped via stdin to avoid Windows command-line length limits.
         """
-        model = CLI_MODEL_MAP.get(feature._model, "sonnet")
+        # VM hotfix integrated (2026-04-19): fallback opus for expert-tier skills.
+        # Max subscription CLI resolves 'opus' → 'claude-opus-4-7' internally.
+        model = CLI_MODEL_MAP.get(feature._model, "opus")
 
         logger.info(
             "[CLI mode] Executing skill '%s' with model '%s'",
