@@ -567,6 +567,28 @@ def write_output_to_vault(
                     file_content = file_content.replace(wrong, expected_prefix)
 
             try:
+                # BUG #25 / v5 post-hoc privacy guard — last line of defense.
+                # Policy "warn" by default: log hits, do not mutate payload. This
+                # lets us observe baseline without breaking prod. Flip to
+                # "sanitize" once baseline is established (grep "privacy_guard"
+                # in api logs to monitor).
+                try:
+                    from app.services.privacy_guard import scan_and_scrub
+                    _scrub = scan_and_scrub(vault, path, file_content, policy="warn")
+                    file_content = _scrub.payload
+                    if _scrub.rejected:
+                        logger.error(
+                            "privacy_guard rejected write to %s (skill=%s) — skipping",
+                            path, skill_name,
+                        )
+                        continue
+                except Exception as _exc_guard:
+                    # Never let the guard's own failure block a legitimate write.
+                    logger.warning(
+                        "privacy_guard skipped due to internal error: %s",
+                        _exc_guard,
+                    )
+
                 if is_append:
                     existing = vault.read_file(path) or ""
                     vault.write_file(path, existing + "\n" + file_content)
@@ -647,6 +669,22 @@ def write_output_to_vault(
         }
         path = path_map.get(skill_name)
         if path:
+            # BUG #25 / v5 post-hoc privacy guard (single-file fallback branch).
+            try:
+                from app.services.privacy_guard import scan_and_scrub
+                _scrub = scan_and_scrub(vault, path, content, policy="warn")
+                content = _scrub.payload
+                if _scrub.rejected:
+                    logger.error(
+                        "privacy_guard rejected write to %s (skill=%s) — skipping",
+                        path, skill_name,
+                    )
+                    return
+            except Exception as _exc_guard:
+                logger.warning(
+                    "privacy_guard skipped due to internal error: %s",
+                    _exc_guard,
+                )
             vault.write_file(path, content)
             logger.info("Wrote vault file: %s", path)
 
