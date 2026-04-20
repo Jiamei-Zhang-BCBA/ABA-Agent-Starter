@@ -77,6 +77,36 @@ def _is_allowed_path(path: str) -> bool:
 _SANITIZE_REPLACEMENT = "[REDACTED]"
 
 
+# BUG #28 (v6 A-小禾 2026-04-20):
+# Historical mapping tables (v1-v5 era) accidentally put kinship terms / generic
+# role words into col0 (真实身份). Once guard was deployed (v5 末尾 commit
+# 7031c2d) it started reading those col0 entries as "known names" and matching
+# them against deidentified archive bodies, which naturally contain many kinship
+# terms like 爷爷/母亲/父亲 — resulting in massive false positives (45 hits in
+# one v6 S1 run, all kinship terms).
+#
+# This blacklist ensures that even if col0 contains these generic words (from
+# legacy pollution or future AI mis-classification), the guard will not treat
+# them as real names. Real people using 姓+title variants (e.g. 王姐 / 张工)
+# bypass this blacklist because their col0 is the姓+specific variant, not the
+# bare generic word.
+_GENERIC_TERM_BLACKLIST: frozenset[str] = frozenset({
+    # 家庭称谓
+    "父亲", "母亲", "爸爸", "妈妈",
+    "爷爷", "奶奶", "外公", "外婆", "姥姥", "姥爷",
+    "叔叔", "舅舅", "阿姨", "姑姑",
+    "哥哥", "姐姐", "弟弟", "妹妹",
+    "兄长", "表哥", "表姐", "堂哥", "堂姐",
+    # 通用角色
+    "儿童", "孩子", "本人", "家长", "监护人", "双方",
+    "医生", "主任", "主治", "专家",
+    "老师", "班主任", "配班", "主班",
+    "督导", "教练", "顾问",
+    # AI 历史误填的代称通词
+    "某同事", "某朋友", "某邻居", "某同学",
+})
+
+
 def _parse_mapping_table(raw: str) -> list[str]:
     """Extract the first column (真实姓名 / 真实品牌名) from a Markdown table.
 
@@ -89,6 +119,10 @@ def _parse_mapping_table(raw: str) -> list[str]:
 
     Each non-header row's first cell is collected. Empty / header / separator
     rows are skipped. Results are deduplicated while preserving order.
+
+    Generic terms (kinship / role words) listed in _GENERIC_TERM_BLACKLIST are
+    also skipped to prevent historical mapping pollution from producing false
+    positives (see BUG #28).
     """
     names: list[str] = []
     seen: set[str] = set()
@@ -109,6 +143,9 @@ def _parse_mapping_table(raw: str) -> list[str]:
         if first.startswith(":") or first.startswith("-"):
             continue
         if "真实" in first or "系统" in first or "aliases" in first.lower():
+            continue
+        # BUG #28: drop generic kinship/role terms that cannot be real names.
+        if first in _GENERIC_TERM_BLACKLIST:
             continue
         if first in seen:
             continue

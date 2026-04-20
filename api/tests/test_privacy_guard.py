@@ -70,6 +70,77 @@ class TestParseMappingTable:
         assert "雪香原味棉花糖" in names
 
 
+class TestBug28KinshipBlacklist:
+    """BUG #28 regression tests — historical mapping col0 pollution.
+
+    v5 A-小满 (and earlier) privacy-filter AI sometimes put kinship terms
+    ("母亲"/"父亲"/"爷爷" 等) directly into col0 of the identity mapping table
+    before the post-hoc guard was deployed. After guard deployment (commit
+    7031c2d), the legacy pollution caused massive false positives (45 hits in
+    v6 S1). The _GENERIC_TERM_BLACKLIST fix ensures these generic terms are
+    dropped during parsing.
+    """
+
+    def test_kinship_terms_skipped(self):
+        raw = (
+            "| 真实身份 | 系统代号 |\n"
+            "|:---|:---|\n"
+            "| 王小满 | Client-A-小满 |\n"
+            "| 母亲 | Client-A-小满 母亲 |\n"
+            "| 父亲 | Client-A-小满 父亲 |\n"
+            "| 爷爷 | Client-A-小满 爷爷 |\n"
+        )
+        names = _parse_mapping_table(raw)
+        assert "王小满" in names
+        assert "母亲" not in names
+        assert "父亲" not in names
+        assert "爷爷" not in names
+
+    def test_role_words_skipped(self):
+        raw = (
+            "| 医生 | 某医生 |\n"
+            "| 老师 | 某老师 |\n"
+            "| 督导 | 某督导 |\n"
+            "| 教练 | 某教练 |\n"
+        )
+        names = _parse_mapping_table(raw)
+        assert names == []
+
+    def test_姓氏敬称_variants_still_pass(self):
+        """Specific 姓+title variants (e.g. 王姐/张工) are NOT in blacklist —
+        they are legitimately real identifiers and must still be treated as names.
+        """
+        raw = (
+            "| 王姐 | 某同事 |\n"
+            "| 张工 | 某工程师 |\n"
+            "| 李老师 | 班主任 |\n"   # 李老师 has surname prefix, not generic
+        )
+        names = _parse_mapping_table(raw)
+        assert "王姐" in names
+        assert "张工" in names
+        assert "李老师" in names
+
+    def test_legacy_mapping_does_not_trigger_false_positive_scan(self):
+        """End-to-end: legacy col0 with kinship terms → scan on deidentified
+        body with kinship terms → expected 0 hits (not 45 like pre-fix).
+        """
+        legacy_mapping = (
+            "| 真实身份 | 系统代号 |\n"
+            "|:---|:---|\n"
+            "| 王小满 | Client-A-小满 |\n"
+            "| 母亲 | Client-A-小满 母亲 |\n"
+            "| 父亲 | Client-A-小满 父亲 |\n"
+            "| 爷爷 | Client-A-小满 爷爷 |\n"
+        )
+        from app.services.privacy_guard import scan_payload
+        known = _parse_mapping_table(legacy_mapping)
+        # Typical deidentified body that uses kinship代称 as normal Chinese
+        body = "母亲送禾禾去幼儿园时，爷爷在楼下接他。父亲下班后陪孩子玩积木。"
+        hits = scan_payload(body, known)
+        # Only 王小满 is a real name; it doesn't appear in body → 0 hits total.
+        assert hits == []
+
+
 # -- path allowlist ----------------------------------------------------------
 
 class TestAllowedPath:
